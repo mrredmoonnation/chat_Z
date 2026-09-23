@@ -13,12 +13,12 @@ import {
 } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDWj2HnwMUA5TIkMwH4xfPskzrNVrfPpdI',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'chatz-e3af3.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'chatz-e3af3',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'chatz-e3af3.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '210827278981',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:210827278981:web:d4854b336d3b32d88e87ec'
 };
 
 export const isFirebaseConfigured = () => {
@@ -221,7 +221,7 @@ export const formatFirebaseAuthError = (err) => {
     case 'auth/too-many-requests':
       return 'Bahut jyada baar galat try kiya gaya. Kripya 2-3 minute rukiye ya password reset karein.';
     case 'auth/unauthorized-domain':
-      return 'Domain not authorized. Add "localhost" under Firebase Console > Authentication > Settings > Authorized domains.';
+      return 'Domain not authorized. Firebase Console (console.firebase.google.com) > Authentication > Settings > Authorized domains me jakar "chat-z-blue.vercel.app" add karein.';
     case 'auth/popup-closed-by-user':
       return 'Google Sign-In window close ho gayi. Kripya dubara try karein.';
     case 'auth/popup-blocked':

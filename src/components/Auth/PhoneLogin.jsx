@@ -401,6 +401,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
       } finally {
         setLoading(false);
       }
+    } else {
+      setLoading(false);
+      setErrorMsg('Firebase configuration missing. Please use Password Login or Sign Up with OTP.');
     }
   };
 
