@@ -7,6 +7,14 @@ import {
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
 import { fetchCloudUsers, publishUserToCloud, pollCloudInbox } from './services/cloudRegistry';
+import { useAuth } from './context/AuthContext';
+import { 
+  getOrCreateOneToOneRoom, 
+  createFirestoreGroupRoom, 
+  subscribeToUserRooms, 
+  sendFirestoreMessage, 
+  subscribeToRoomMessages 
+} from './services/firestoreChat';
 import PhoneLogin from './components/Auth/PhoneLogin';
 import Sidebar from './components/Sidebar/Sidebar';
 import ChatArea from './components/Chat/ChatArea';
@@ -16,6 +24,7 @@ import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
 import DisguiseModal from './components/Privacy/DisguiseModal';
 
 export default function App() {
+  const { currentUser: authUser, logout: authLogout } = useAuth();
   const [currentUser, setCurrentUser] = useState(() => {
     const u = getStoredUser();
     if (u && !u.username) {
@@ -25,10 +34,117 @@ export default function App() {
     }
     return u;
   });
+
+  // Sync authUser from Firebase AuthContext to currentUser
+  useEffect(() => {
+    if (authUser) {
+      setCurrentUser(authUser);
+      saveStoredUser(authUser);
+    }
+  }, [authUser]);
+
+  const [firestoreRooms, setFirestoreRooms] = useState([]);
   const [contacts, setContacts] = useState(() => getStoredContacts());
   const [activeContactId, setActiveContactId] = useState(null);
   const [stories, setStories] = useState(() => getStoredStories());
   const [settings, setSettings] = useState(() => getSettings());
+
+  // Real-time Firestore ChatRooms subscription for current user
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsubscribe = subscribeToUserRooms(
+      currentUser.uid,
+      (rooms) => {
+        setFirestoreRooms(rooms);
+      },
+      (err) => {
+        console.warn('Firestore rooms listen notice:', err);
+      }
+    );
+    return () => unsubscribe();
+  }, [currentUser?.uid]);
+
+  // Merge real-time Firestore rooms with local contacts
+  const mergedContacts = React.useMemo(() => {
+    if (!firestoreRooms || firestoreRooms.length === 0) {
+      return contacts;
+    }
+
+    const roomContacts = firestoreRooms.map((r) => {
+      if (r.type === 'group') {
+        const existing = contacts.find((c) => c.id === r.id);
+        return {
+          id: r.id,
+          roomId: r.id,
+          isGroup: true,
+          name: r.roomName || 'Group',
+          avatar: r.roomAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${r.id}`,
+          about: 'Group Chat',
+          isOnline: false,
+          lastSeen: 'Group',
+          lastMessage: r.lastMessage || '',
+          lastMessageTimestamp: r.lastMessageTimestamp,
+          unreadCount: 0,
+          messages: existing?.messages || []
+        };
+      }
+
+      // 1-to-1 room
+      const otherUid = r.participants?.find((uid) => uid !== currentUser?.uid);
+      const otherProfile = r.participantProfiles?.[otherUid] || {};
+      const existing = contacts.find((c) => c.id === r.id || (otherUid && c.otherUid === otherUid));
+
+      return {
+        id: r.id,
+        roomId: r.id,
+        otherUid: otherUid,
+        username: otherProfile.username || existing?.username || null,
+        name: otherProfile.displayName || otherProfile.name || existing?.name || otherProfile.username || 'Friend',
+        avatar: otherProfile.photoURL || otherProfile.avatar || existing?.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${otherUid || 'User'}`,
+        about: otherProfile.about || existing?.about || 'Connected on Chatz',
+        isOnline: true,
+        lastSeen: 'Online',
+        lastMessage: r.lastMessage || '',
+        lastMessageTimestamp: r.lastMessageTimestamp,
+        unreadCount: 0,
+        messages: existing?.messages || []
+      };
+    });
+
+    const roomIds = new Set(roomContacts.map((c) => c.id));
+    const nonRoomContacts = contacts.filter((c) => !roomIds.has(c.id));
+    return [...roomContacts, ...nonRoomContacts];
+  }, [firestoreRooms, contacts, currentUser?.uid]);
+
+  // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
+  useEffect(() => {
+    if (!activeContactId) return;
+
+    const target = mergedContacts.find((c) => c.id === activeContactId);
+    const roomId = target?.roomId || (activeContactId.startsWith('room_') ? activeContactId : null);
+
+    if (!roomId) return;
+
+    const unsubscribe = subscribeToRoomMessages(
+      roomId,
+      (firestoreMessages) => {
+        setContacts((prev) => {
+          const exists = prev.some((c) => c.id === activeContactId);
+          if (exists) {
+            return prev.map((c) => (c.id === activeContactId ? { ...c, messages: firestoreMessages } : c));
+          } else if (target) {
+            return [{ ...target, messages: firestoreMessages }, ...prev];
+          }
+          return prev;
+        });
+      },
+      (err) => {
+        console.warn('Firestore messages listener notice:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeContactId, mergedContacts]);
 
   // Online P2P state
   const p2pRef = useRef(null);
@@ -556,6 +672,9 @@ export default function App() {
       p2pRef.current.destroy();
       p2pRef.current = null;
     }
+    if (authLogout) {
+      authLogout();
+    }
     localStorage.removeItem('chatz_user_v1');
     localStorage.removeItem('wa_clone_current_user_v2');
     setCurrentUser(null);
@@ -569,15 +688,45 @@ export default function App() {
     saveSettings(updated);
   };
 
-  // Send Message with WhatsApp realistic tick progression:
-  // sent (single tick) -> delivered (double grey tick) -> read (double blue tick)
-  const handleSendMessage = (msgData) => {
+  // Start / Open 1-to-1 Firestore Chat Room
+  const handleStartChatRoom = async (targetUser) => {
+    if (currentUser?.uid && (targetUser?.uid || targetUser?.id?.startsWith('user_'))) {
+      const cleanUid = targetUser.uid || targetUser.id.replace('user_', '');
+      try {
+        const room = await getOrCreateOneToOneRoom(currentUser, { ...targetUser, uid: cleanUid });
+        if (room) {
+          handleSelectContact(room.id);
+          return room;
+        }
+      } catch (err) {
+        console.warn('getOrCreateOneToOneRoom warning:', err);
+      }
+    }
+    return null;
+  };
+
+  // Send Message with Firestore real-time sync + WhatsApp realistic tick progression
+  const handleSendMessage = async (msgData) => {
     if (!activeContactId) return;
+
+    const targetContact = mergedContacts.find((c) => c.id === activeContactId);
+    const roomId = targetContact?.roomId || (activeContactId.startsWith('room_') ? activeContactId : null);
+
+    // 1. If active chat is a Firestore room, dispatch directly to Firestore!
+    if (roomId && currentUser?.uid) {
+      try {
+        await sendFirestoreMessage(roomId, currentUser, msgData);
+        sounds.playMessageSent();
+        return;
+      } catch (err) {
+        console.warn('Firestore message dispatch notice (falling back):', err);
+      }
+    }
 
     const messageId = 'm_' + Date.now();
     const newMsg = {
       id: messageId,
-      senderId: currentUser?.id || 'user',
+      senderId: currentUser?.uid || currentUser?.id || 'user',
       ...msgData,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timestamp: Date.now(),
@@ -604,19 +753,18 @@ export default function App() {
     broadcastChange('NEW_MESSAGE', { contactId: activeContactId, message: newMsg });
 
     // Target peer ID for this specific contact
-    const targetContact = contacts.find((c) => c.id === activeContactId);
     const targetPeerId = targetContact?.username 
       ? `wa_user_${targetContact.username}` 
       : (activeContactId.startsWith('wa_user_') ? activeContactId : targetContact?.phone);
 
-    // Send over Internet P2P directly to recipient's phone if connected!
-    const sentInternet = p2pRef.current?.sendData({
+    // Send over Internet P2P & MQTT directly to recipient's phone if connected!
+    p2pRef.current?.sendData({
       type: 'CHAT_MESSAGE',
       message: newMsg,
       senderId: currentUser?.username ? `wa_user_${currentUser.username}` : currentUser?.id,
       senderUsername: currentUser?.username || null,
-      senderName: currentUser?.name || 'Friend',
-      senderAvatar: currentUser?.avatar || null
+      senderName: currentUser?.displayName || currentUser?.name || 'Friend',
+      senderAvatar: currentUser?.photoURL || currentUser?.avatar || null
     }, targetPeerId);
 
     // 2. Progression: Transition from 'sent' to 'delivered' (double grey tick) after network ping (600ms)
@@ -637,8 +785,6 @@ export default function App() {
         return updated;
       });
     }, 600);
-
-    // Real P2P messages are delivered directly via OnlineP2PService without fake bot replies
   };
 
   // Support typing indicator broadcast from ChatInput to P2P peer
@@ -728,13 +874,26 @@ export default function App() {
   };
 
   // Create new Group
-  const handleCreateGroup = ({ name, avatar, members }) => {
+  const handleCreateGroup = async ({ name, avatar, members }) => {
+    if (currentUser?.uid) {
+      try {
+        const room = await createFirestoreGroupRoom(currentUser, name, avatar, members);
+        if (room) {
+          handleSelectContact(room.id);
+          setIsNewGroupOpen(false);
+          return;
+        }
+      } catch (e) {
+        console.warn('Firestore group room fallback:', e);
+      }
+    }
+
     const newGroup = {
       id: 'group_' + Date.now(),
       isGroup: true,
       name,
       avatar,
-      about: 'Group created by ' + (currentUser?.name || 'You'),
+      about: 'Group created by ' + (currentUser?.displayName || currentUser?.name || 'You'),
       isOnline: false,
       lastSeen: 'Group',
       unreadCount: 0,
@@ -742,8 +901,8 @@ export default function App() {
       messages: [
         {
           id: 'gm_' + Date.now(),
-          senderId: 'user',
-          senderName: currentUser?.name,
+          senderId: currentUser?.uid || 'user',
+          senderName: currentUser?.displayName || currentUser?.name,
           text: `Hey everyone! Welcome to ${name} 🎉`,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           timestamp: Date.now(),
@@ -756,6 +915,7 @@ export default function App() {
     setContacts(updated);
     saveStoredContacts(updated);
     handleSelectContact(newGroup.id);
+    setIsNewGroupOpen(false);
   };
 
   // Start Call
@@ -780,7 +940,7 @@ export default function App() {
     return <PhoneLogin onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const activeContact = activeContactId ? (contacts.find((c) => c.id === activeContactId) || null) : null;
+  const activeContact = activeContactId ? (mergedContacts.find((c) => c.id === activeContactId) || null) : null;
 
   return (
     <div className="wa-app-wrapper">
@@ -789,7 +949,7 @@ export default function App() {
         <div className={`wa-sidebar-wrapper ${showMobileChat ? 'mobile-hidden' : ''}`}>
           <Sidebar
             currentUser={currentUser}
-            contacts={contacts}
+            contacts={mergedContacts}
             activeContactId={activeContactId}
             onSelectContact={handleSelectContact}
             onOpenNewGroup={() => setIsNewGroupOpen(true)}
@@ -805,6 +965,7 @@ export default function App() {
             onToggleTheme={handleToggleTheme}
             onUpdateProfile={handleUpdateProfile}
             onAddContact={handleAddContact}
+            onStartChatRoom={handleStartChatRoom}
             onOpenDisguise={() => setIsDisguiseOpen(true)}
             onLogout={handleLogout}
           />

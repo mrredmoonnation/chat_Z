@@ -13,6 +13,7 @@ import {
   subscribeToBroadcast
 } from '../../services/store';
 import { fetchCloudUsers } from '../../services/cloudRegistry';
+import { searchFirestoreUsers } from '../../services/firestoreChat';
 import StatusView from '../Status/StatusView';
 
 const DRAWER_BIO_PRESETS = [
@@ -44,6 +45,7 @@ export default function Sidebar({
   onToggleTheme,
   onUpdateProfile,
   onAddContact,
+  onStartChatRoom,
   onLogout
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
@@ -199,14 +201,30 @@ export default function Sidebar({
     setIsManualEntry(false);
   };
 
-  // Connect directly with any discovered global user
-  const handleConnectWithGlobalUser = (u) => {
+  // Connect directly with any discovered global user (via Firestore Room or P2P)
+  const handleConnectWithGlobalUser = async (u) => {
+    if (onStartChatRoom) {
+      try {
+        const room = await onStartChatRoom(u);
+        if (room) {
+          onSelectContact(room.id);
+          setSearchQuery('');
+          setIsAddContactOpen(false);
+          setModalSearchQuery('');
+          return;
+        }
+      } catch (e) {
+        console.warn('onStartChatRoom warning:', e);
+      }
+    }
+
     const newContact = {
-      id: u.id || ('wa_user_' + u.username),
+      id: u.uid ? `user_${u.uid}` : (u.id || ('wa_user_' + u.username)),
+      uid: u.uid || null,
       username: u.username,
-      name: u.name,
+      name: u.displayName || u.name,
       about: u.about || 'Hey there! I am using Chatz',
-      avatar: u.avatar || AVATAR_PRESETS[0],
+      avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
       phone: u.phone || '',
       email: u.email || '',
       isOnline: true,
@@ -258,6 +276,7 @@ export default function Sidebar({
 
   // Registry sync tick for real-time global user updates
   const [registryTick, setRegistryTick] = useState(0);
+  const [firestoreSearchResults, setFirestoreSearchResults] = useState([]);
 
   useEffect(() => {
     const unsub = subscribeToBroadcast((data) => {
@@ -271,39 +290,85 @@ export default function Sidebar({
   // Modal Instagram-style user query
   const cleanModalQ = cleanUsername(modalSearchQuery);
 
-  // Fetch latest global users on typing search
+  // Fetch latest global users on typing search (both Cloud Registry & Firestore Users collection)
   useEffect(() => {
-    if (searchQuery.trim().length >= 2 || (cleanModalQ && cleanModalQ.length >= 2)) {
+    const currentQ = searchQuery.trim() || modalSearchQuery.trim();
+    if (currentQ.length >= 2) {
       const timer = setTimeout(() => {
         fetchCloudUsers().then(() => setRegistryTick((prev) => prev + 1));
-      }, 250);
+        searchFirestoreUsers(currentQ, currentUser?.uid).then((results) => {
+          setFirestoreSearchResults(results || []);
+        });
+      }, 200);
       return () => clearTimeout(timer);
+    } else {
+      setFirestoreSearchResults([]);
     }
-  }, [searchQuery, cleanModalQ]);
+  }, [searchQuery, modalSearchQuery, currentUser?.uid]);
 
   // Global Instagram-style user discovery
   const globalUserResults = React.useMemo(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) return [];
-    const all = searchUsersByUsername(searchQuery);
+    const localMatches = searchUsersByUsername(searchQuery);
+    
+    // Combine local store and Firestore users
+    const combined = [...firestoreSearchResults, ...localMatches];
+    const seen = new Set();
+    const deduped = [];
+
+    combined.forEach((u) => {
+      const key = u.uid || u.username?.toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        deduped.push({
+          uid: u.uid || null,
+          id: u.uid ? `user_${u.uid}` : (u.id || ('wa_user_' + u.username)),
+          username: u.username,
+          name: u.displayName || u.name,
+          avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
+          about: u.about || 'Hey there! I am using Chatz'
+        });
+      }
+    });
+
     const existingIds = new Set(contacts.map((c) => c.id));
     const existingUsernames = new Set(contacts.map((c) => c.username?.toLowerCase()).filter(Boolean));
-    return all.filter((u) => 
-      u.id !== currentUser?.id && 
+    return deduped.filter((u) => 
+      u.uid !== currentUser?.uid &&
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase() &&
       !existingIds.has(u.id) &&
       !existingUsernames.has(u.username?.toLowerCase())
     );
-  }, [searchQuery, contacts, currentUser, registryTick]);
+  }, [searchQuery, contacts, currentUser, registryTick, firestoreSearchResults]);
 
   // Modal Instagram-style user discovery
   const modalSearchResults = React.useMemo(() => {
     if (!cleanModalQ) return [];
-    const all = searchUsersByUsername(cleanModalQ);
-    return all.filter((u) => 
-      u.id !== currentUser?.id && 
+    const localMatches = searchUsersByUsername(cleanModalQ);
+    const combined = [...firestoreSearchResults, ...localMatches];
+    const seen = new Set();
+    const deduped = [];
+
+    combined.forEach((u) => {
+      const key = u.uid || u.username?.toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        deduped.push({
+          uid: u.uid || null,
+          id: u.uid ? `user_${u.uid}` : (u.id || ('wa_user_' + u.username)),
+          username: u.username,
+          name: u.displayName || u.name,
+          avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
+          about: u.about || 'Hey there! I am using Chatz'
+        });
+      }
+    });
+
+    return deduped.filter((u) => 
+      u.uid !== currentUser?.uid &&
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase()
     );
-  }, [cleanModalQ, currentUser, registryTick]);
+  }, [cleanModalQ, currentUser, registryTick, firestoreSearchResults]);
 
   // Check if search query matches user's own identity or an exact existing contact
   const hasExactContact = contacts.some(

@@ -17,6 +17,7 @@ import {
 } from '../../services/firebase';
 import { sendRealEmailOtp } from '../../services/emailOtp';
 import { publishUserToCloud } from '../../services/cloudRegistry';
+import { useAuth } from '../../context/AuthContext';
 
 const BIO_PRESETS = [
   '📶 Available on WiFi',
@@ -30,6 +31,7 @@ const BIO_PRESETS = [
 
 export default function PhoneLogin({ onLoginSuccess }) {
   const firebaseAvailable = isFirebaseConfigured();
+  const { loginWithGoogle } = useAuth();
 
   // Mode: 'login', 'signup_email', 'signup_otp', 'signup_profile'
   const [authMode, setAuthMode] = useState('login');
@@ -365,7 +367,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
     }, 400);
   };
 
-  // 1-Click Google Sign-In
+  // 1-Click Google Sign-In with Firestore Profile Sync
   const handleGoogleSignIn = async () => {
     setErrorMsg('');
     setSuccessMsg('');
@@ -373,32 +375,14 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
     if (firebaseAvailable) {
       try {
-        const user = await signInWithGoogle();
-        if (user) {
-          const userDisplayName = user.displayName || user.email?.split('@')[0] || 'Chatz User';
-          const userEmail = user.email || '';
-          
-          setSignupName(userDisplayName);
-          setSignupEmail(userEmail);
-          
-          if (user.photoURL) {
-            setCustomAvatar(user.photoURL);
-            setAvatar(user.photoURL);
-          }
-
-          const baseName = userEmail ? userEmail.split('@')[0] : userDisplayName;
-          const cleanSug = cleanUsername(baseName.replace(/\s+/g, '_'));
-          validateAndSetUsername(cleanSug || 'user_' + Math.floor(Math.random() * 1000));
-
-          // If account exists, log in directly
-          const existing = findAccountByUsernameOrEmail(userEmail);
-          if (existing?.profile) {
-            publishUserToCloud(existing.profile);
-            onLoginSuccess(existing.profile);
-          } else {
-            // New user: advance to set password & profile
-            handleModeChange('signup_profile');
-          }
+        const firestoreProfile = await loginWithGoogle();
+        if (firestoreProfile) {
+          setSuccessMsg('Google Login successful! Welcome to Chatz.');
+          setTimeout(() => {
+            setLoading(false);
+            onLoginSuccess(firestoreProfile);
+          }, 300);
+          return;
         }
       } catch (err) {
         console.error('Firebase Google Sign-in Error:', err);

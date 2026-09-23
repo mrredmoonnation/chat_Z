@@ -11,6 +11,7 @@ import {
   sendEmailVerification,
   updateProfile
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDWj2HnwMUA5TIkMwH4xfPskzrNVrfPpdI',
@@ -35,21 +36,41 @@ export const getFirebaseProjectId = () => {
 
 let app = null;
 let auth = null;
+let db = null;
+
+export const getFirebaseApp = () => {
+  if (!app && isFirebaseConfigured()) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  }
+  return app;
+};
 
 export const getFirebaseAuth = () => {
   if (!auth && isFirebaseConfigured()) {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-    auth = getAuth(app);
+    const firebaseApp = getFirebaseApp();
+    auth = getAuth(firebaseApp);
   }
   return auth;
+};
+
+export const getFirebaseFirestore = () => {
+  if (!db && isFirebaseConfigured()) {
+    const firebaseApp = getFirebaseApp();
+    db = getFirestore(firebaseApp);
+  }
+  return db;
 };
 
 // Initialize early if configured
 if (isFirebaseConfigured()) {
   getFirebaseAuth();
+  getFirebaseFirestore();
 }
 
-export { auth };
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+export { auth, db };
 
 /**
  * Setup invisible reCAPTCHA verifier for phone auth
