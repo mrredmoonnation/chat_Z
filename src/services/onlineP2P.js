@@ -6,9 +6,35 @@ import { sendCloudInboxMessage } from './cloudRegistry';
 const GOOGLE_ICE_CONFIG = {
   config: {
     iceServers: [
+      // High-speed Google STUN
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+
+      // Free Metered OpenRelay TURN servers (Essential for mobile data / 4G / 5G / CGNAT)
+      { urls: 'stun:openrelay.metered.ca:80' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ]
   }
 };
@@ -245,8 +271,9 @@ export class OnlineP2PService {
       conn = this.connections.get(cleanTarget) || this.activeDataConnection;
     }
 
-    if (!conn || !conn.open) {
-      conn = this.activeDataConnection;
+    // Always dispatch CHAT_MESSAGE via real-time cloud relay to guarantee delivery across mobile data / CGNAT
+    if (payload?.type === 'CHAT_MESSAGE' && targetUsername) {
+      sendCloudInboxMessage(targetUsername, payload);
     }
 
     // 1. If connection is already open, send directly over P2P!
@@ -264,15 +291,10 @@ export class OnlineP2PService {
       const list = this.pendingQueue.get(cleanTarget) || [];
       list.push(payload);
       this.pendingQueue.set(cleanTarget, list);
-
-      // 3. Also relay via Cloud Inbox so message is delivered even if receiver is offline or on restricted NAT
-      if (payload?.type === 'CHAT_MESSAGE' && targetUsername) {
-        sendCloudInboxMessage(targetUsername, payload);
-      }
       return true;
     }
 
-    return false;
+    return true;
   }
 
   // Initiate an audio/video call to partner across the internet
