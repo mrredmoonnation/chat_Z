@@ -1,0 +1,670 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
+  getStoredStories, saveStoredStories, getSettings, saveSettings,
+  broadcastChange, subscribeToBroadcast, AVATAR_PRESETS
+} from './services/store';
+import { sounds } from './services/audioEffects';
+import { OnlineP2PService } from './services/onlineP2P';
+import PhoneLogin from './components/Auth/PhoneLogin';
+import Sidebar from './components/Sidebar/Sidebar';
+import ChatArea from './components/Chat/ChatArea';
+import CallModal from './components/Call/CallModal';
+import NewGroupModal from './components/Groups/NewGroupModal';
+import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
+import DisguiseModal from './components/Privacy/DisguiseModal';
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [contacts, setContacts] = useState(() => getStoredContacts());
+  const [activeContactId, setActiveContactId] = useState(null);
+  const [stories, setStories] = useState(() => getStoredStories());
+  const [settings, setSettings] = useState(() => getSettings());
+
+  // Online P2P state
+  const p2pRef = useRef(null);
+  const [partnerOnlineStatus, setPartnerOnlineStatus] = useState('disconnected'); // 'connected' | 'disconnected'
+  const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
+  const [isDisguiseOpen, setIsDisguiseOpen] = useState(false);
+
+  // Modals state
+  const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
+  const [callState, setCallState] = useState({
+    isOpen: false,
+    isIncoming: false,
+    contact: null,
+    isVideo: false
+  });
+
+  // Mobile navigation state
+  const [showMobileChat, setShowMobileChat] = useState(false);
+
+  // Select contact & push history state so browser/hardware back button works seamlessly
+  const handleSelectContact = (id) => {
+    setActiveContactId(id);
+    setShowMobileChat(true);
+
+    // Push new history state
+    if (!window.history.state || window.history.state.waView !== 'chat' || window.history.state.contactId !== id) {
+      window.history.pushState({ waView: 'chat', contactId: id }, '');
+    }
+  };
+
+  // Back to contacts handler
+  const handleBackToContacts = () => {
+    setShowMobileChat(false);
+    if (window.innerWidth >= 768) {
+      setActiveContactId(null);
+    }
+
+    if (window.history.state?.waView === 'chat') {
+      window.history.back();
+    } else {
+      window.history.replaceState({ waView: 'contacts' }, '');
+    }
+  };
+
+  // Browser / Phone Back Button Navigation Handling (Prevents exiting website)
+  useEffect(() => {
+    // Set initial state
+    if (!window.history.state) {
+      window.history.replaceState({ waView: 'contacts' }, '');
+    }
+
+    const handlePopState = (event) => {
+      const state = event.state;
+
+      // 1. If any modal is open, close modal first
+      if (isNewGroupOpen) {
+        setIsNewGroupOpen(false);
+        return;
+      }
+      if (isPartnerModalOpen) {
+        setIsPartnerModalOpen(false);
+        return;
+      }
+      if (isDisguiseOpen) {
+        setIsDisguiseOpen(false);
+        return;
+      }
+      if (callState.isOpen) {
+        handleEndCall();
+        return;
+      }
+
+      // 2. If back was pressed from chat, return to contacts view
+      if (state?.waView === 'chat' && state?.contactId) {
+        setActiveContactId(state.contactId);
+        setShowMobileChat(true);
+      } else {
+        setShowMobileChat(false);
+        if (window.innerWidth >= 768) {
+          setActiveContactId(null);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isNewGroupOpen, isPartnerModalOpen, isDisguiseOpen, callState.isOpen]);
+
+  // Stealth Panic Hotkey: Ctrl+Shift+L or Alt+C toggles disguise calculator
+  useEffect(() => {
+    const handleStealthKey = (e) => {
+      if ((e.ctrlKey && e.shiftKey && e.key?.toLowerCase() === 'l') || (e.altKey && e.key?.toLowerCase() === 'c')) {
+        e.preventDefault();
+        setIsDisguiseOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleStealthKey);
+    return () => window.removeEventListener('keydown', handleStealthKey);
+  }, []);
+
+  // Apply theme
+  useEffect(() => {
+    if (settings.theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }, [settings.theme]);
+
+  // Initialize Online P2P Internet Connection when logged in
+  useEffect(() => {
+    const userIdentifier = currentUser?.phone || currentUser?.email || currentUser?.id;
+    if (!userIdentifier) return;
+
+    const p2p = new OnlineP2PService({
+      myIdentifier: userIdentifier,
+      onStatusChange: ({ status, partnerId }) => {
+        if (status === 'partner_connected') {
+          setPartnerOnlineStatus('connected');
+          setContacts((prev) => {
+            const existing = prev.find((c) => c.isPartner || c.id === partnerId);
+            if (existing) {
+              const updated = prev.map((c) =>
+                c.id === existing.id
+                  ? { ...c, isOnline: true, lastSeen: 'Online (Live P2P)' }
+                  : c
+              );
+              saveStoredContacts(updated);
+              return updated;
+            } else {
+              const cleanPartnerName = partnerId ? partnerId.replace('wa_user_', '') : 'Partner';
+              const newPartner = {
+                id: partnerId || 'partner_live',
+                isPartner: true,
+                name: cleanPartnerName,
+                avatar: AVATAR_PRESETS[0],
+                about: 'Connected Live on Chatz',
+                isOnline: true,
+                lastSeen: 'Online (Live P2P)',
+                messages: []
+              };
+              const updated = [newPartner, ...prev];
+              saveStoredContacts(updated);
+              return updated;
+            }
+          });
+        } else if (status === 'partner_disconnected') {
+          setPartnerOnlineStatus('disconnected');
+          setContacts((prev) => {
+            const updated = prev.map((c) =>
+              c.isPartner || c.id === partnerId
+                ? { ...c, isOnline: false, lastSeen: 'Offline' }
+                : c
+            );
+            saveStoredContacts(updated);
+            return updated;
+          });
+        }
+      },
+      onMessageReceived: (payload) => {
+        if (payload?.type === 'CHAT_MESSAGE') {
+          setContacts((prev) => {
+            const partner = prev.find((c) => c.isPartner || c.id === payload.senderId);
+            const targetId = partner ? partner.id : (payload.senderId || 'partner_live');
+            const incomingMsg = {
+              ...payload.message,
+              id: 'p2p_' + Date.now(),
+              senderId: targetId
+            };
+
+            if (partner) {
+              const updated = prev.map((c) => {
+                if (c.id === partner.id) {
+                  return {
+                    ...c,
+                    messages: [...(c.messages || []), incomingMsg],
+                    unreadCount: (c.unreadCount || 0) + 1
+                  };
+                }
+                return c;
+              });
+              saveStoredContacts(updated);
+              return updated;
+            } else {
+              const newPartner = {
+                id: targetId,
+                isPartner: true,
+                name: payload.senderName || 'Partner',
+                avatar: AVATAR_PRESETS[0],
+                about: 'Connected Live',
+                isOnline: true,
+                lastSeen: 'Online (Live P2P)',
+                unreadCount: 1,
+                messages: [incomingMsg]
+              };
+              const updated = [newPartner, ...prev];
+              saveStoredContacts(updated);
+              return updated;
+            }
+          });
+          sounds.playMessageReceived();
+        }
+      },
+      onIncomingCall: (mediaCall) => {
+        const partnerContact = contacts.find((c) => c.isPartner) || contacts[0] || {
+          name: 'Partner',
+          avatar: AVATAR_PRESETS[0]
+        };
+        setCallState({
+          isOpen: true,
+          isIncoming: true,
+          contact: partnerContact,
+          isVideo: mediaCall.metadata?.isVideo ?? true
+        });
+      }
+    });
+
+    p2p.init();
+    p2pRef.current = p2p;
+
+    // Check if URL has ?partner=XXXXX to auto-connect immediately!
+    const params = new URLSearchParams(window.location.search);
+    const partnerFromUrl = params.get('partner');
+    if (partnerFromUrl) {
+      setTimeout(() => {
+        p2p.connectToPartner(partnerFromUrl);
+      }, 1500);
+    }
+
+    return () => {
+      p2p.destroy();
+      p2pRef.current = null;
+    };
+  }, [currentUser?.phone, currentUser?.email, currentUser?.id]);
+
+  // Handle manual partner connection
+  const handleConnectPartner = (phoneOrId) => {
+    if (p2pRef.current) {
+      p2pRef.current.connectToPartner(phoneOrId);
+    }
+  };
+
+  // Listen to real-time events across tabs
+  useEffect(() => {
+    const unsubscribe = subscribeToBroadcast((data) => {
+      if (!data) return;
+
+      if (data.type === 'USER_UPDATED') {
+        setCurrentUser(data.payload);
+      } else if (data.type === 'NEW_MESSAGE') {
+        const { contactId, message } = data.payload;
+        setContacts((prev) => {
+          const updated = prev.map((c) => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                messages: [...(c.messages || []), message]
+              };
+            }
+            return c;
+          });
+          saveStoredContacts(updated);
+          return updated;
+        });
+        sounds.playMessageReceived();
+
+        // If this tab currently has this chat open, mark as read, otherwise acknowledge delivered
+        if (activeContactId === contactId) {
+          broadcastChange('MESSAGES_READ', { contactId });
+        } else {
+          broadcastChange('MESSAGE_DELIVERED', { contactId, messageId: message.id });
+        }
+      } else if (data.type === 'MESSAGE_DELIVERED') {
+        const { contactId, messageId } = data.payload;
+        setContacts((prev) => {
+          const updated = prev.map((c) => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                messages: (c.messages || []).map((m) => 
+                  m.id === messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
+                )
+              };
+            }
+            return c;
+          });
+          saveStoredContacts(updated);
+          return updated;
+        });
+      } else if (data.type === 'MESSAGES_READ') {
+        const { contactId } = data.payload;
+        setContacts((prev) => {
+          const updated = prev.map((c) => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                messages: (c.messages || []).map((m) => ({ ...m, status: 'read' }))
+              };
+            }
+            return c;
+          });
+          saveStoredContacts(updated);
+          return updated;
+        });
+      } else if (data.type === 'TYPING_STATUS') {
+        const { contactId, isTyping } = data.payload;
+        setContacts((prev) => 
+          prev.map((c) => (c.id === contactId ? { ...c, isTyping } : c))
+        );
+      } else if (data.type === 'START_CALL') {
+        setCallState({
+          isOpen: true,
+          isIncoming: true,
+          contact: data.payload.contact,
+          isVideo: data.payload.isVideo
+        });
+      } else if (data.type === 'END_CALL') {
+        setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
+      } else if (data.type === 'STORIES_UPDATED') {
+        setStories(data.payload);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeContactId]);
+
+  // Handle Login Success
+  const handleLoginSuccess = (profile) => {
+    setCurrentUser(profile);
+    saveStoredUser(profile);
+  };
+
+  // Handle Profile Updates (Name, Bio, Avatar)
+  const handleUpdateProfile = (updatedProfile) => {
+    setCurrentUser(updatedProfile);
+    saveStoredUser(updatedProfile);
+  };
+
+  // Handle Adding a New Contact
+  const handleAddContact = (newContact) => {
+    setContacts((prev) => {
+      const exists = prev.some((c) => c.id === newContact.id);
+      if (exists) return prev;
+      const updated = [newContact, ...prev];
+      saveStoredContacts(updated);
+      return updated;
+    });
+    setActiveContactId(newContact.id);
+    setShowMobileChat(true);
+  };
+
+  // Handle Logout
+  const handleLogout = () => {
+    if (p2pRef.current) {
+      p2pRef.current.destroy();
+      p2pRef.current = null;
+    }
+    localStorage.removeItem('chatz_user_v1');
+    localStorage.removeItem('wa_clone_current_user_v2');
+    setCurrentUser(null);
+  };
+
+  // Toggle Theme
+  const handleToggleTheme = () => {
+    const newTheme = settings.theme === 'dark' ? 'light' : 'dark';
+    const updated = { ...settings, theme: newTheme };
+    setSettings(updated);
+    saveSettings(updated);
+  };
+
+  // Send Message with WhatsApp realistic tick progression:
+  // sent (single tick) -> delivered (double grey tick) -> read (double blue tick)
+  const handleSendMessage = (msgData) => {
+    if (!activeContactId) return;
+
+    const messageId = 'm_' + Date.now();
+    const newMsg = {
+      id: messageId,
+      senderId: currentUser?.id || 'user',
+      ...msgData,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
+      status: 'sent' // 1. Starts with Single Grey Tick!
+    };
+
+    sounds.playMessageSent();
+
+    setContacts((prev) => {
+      const updated = prev.map((c) => {
+        if (c.id === activeContactId) {
+          return {
+            ...c,
+            messages: [...(c.messages || []), newMsg]
+          };
+        }
+        return c;
+      });
+      saveStoredContacts(updated);
+      return updated;
+    });
+
+    // Send over BroadcastChannel (local tabs)
+    broadcastChange('NEW_MESSAGE', { contactId: activeContactId, message: newMsg });
+
+    // Send over Internet P2P directly to partner's phone if connected!
+    const sentInternet = p2pRef.current?.sendData({
+      type: 'CHAT_MESSAGE',
+      message: newMsg
+    });
+
+    // 2. Progression: Transition from 'sent' to 'delivered' (double grey tick) after network ping (600ms)
+    setTimeout(() => {
+      setContacts((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id === activeContactId) {
+            return {
+              ...c,
+              messages: (c.messages || []).map((m) => 
+                m.id === messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
+              )
+            };
+          }
+          return c;
+        });
+        saveStoredContacts(updated);
+        return updated;
+      });
+    }, 600);
+
+    // Real P2P messages are delivered directly via OnlineP2PService without fake bot replies
+  };
+
+  // Support typing indicator broadcast from ChatInput to P2P peer
+  handleSendMessage.onTyping = (isTyping) => {
+    if (!activeContactId) return;
+    broadcastChange('TYPING_STATUS', { contactId: activeContactId, isTyping });
+    p2pRef.current?.sendData({
+      type: 'TYPING_STATUS',
+      isTyping
+    });
+  };
+
+  // Clear chat history
+  const handleClearChat = (contactId) => {
+    setContacts((prev) => {
+      const updated = prev.map((c) => (c.id === contactId ? { ...c, messages: [] } : c));
+      saveStoredContacts(updated);
+      return updated;
+    });
+  };
+
+  // Add new Story (supports multiple slides / updates)
+  const handleAddStory = (item) => {
+    const existingIndex = stories.findIndex((s) => s.contactId === 'user');
+    let updated;
+    if (existingIndex >= 0) {
+      const existing = stories[existingIndex];
+      const updatedUserStory = {
+        ...existing,
+        contactName: currentUser?.name || 'My Status',
+        avatar: currentUser?.avatar,
+        timestamp: Date.now(),
+        timeText: 'Just now',
+        items: [...(existing.items || []), item]
+      };
+      updated = [...stories];
+      updated[existingIndex] = updatedUserStory;
+    } else {
+      const newStory = {
+        id: 'story_user_' + Date.now(),
+        contactId: 'user',
+        contactName: currentUser?.name || 'My Status',
+        avatar: currentUser?.avatar,
+        timestamp: Date.now(),
+        timeText: 'Just now',
+        items: [item]
+      };
+      updated = [newStory, ...stories];
+    }
+    setStories(updated);
+    saveStoredStories(updated);
+  };
+
+  // Delete entire story
+  const handleDeleteStory = (storyId) => {
+    const updated = stories.filter((s) => s.id !== storyId);
+    setStories(updated);
+    saveStoredStories(updated);
+  };
+
+  // Delete specific item (slide) within a story
+  const handleDeleteStoryItem = (storyId, itemId) => {
+    const updated = stories
+      .map((s) => {
+        if (s.id === storyId) {
+          const remainingItems = (s.items || []).filter((item) => item.id !== itemId);
+          return {
+            ...s,
+            items: remainingItems
+          };
+        }
+        return s;
+      })
+      .filter((s) => s.items && s.items.length > 0);
+
+    setStories(updated);
+    saveStoredStories(updated);
+  };
+
+  // Reply to story
+  const handleReplyToStory = (contactId, replyText) => {
+    handleSelectContact(contactId);
+    handleSendMessage({
+      type: 'text',
+      text: replyText
+    });
+  };
+
+  // Create new Group
+  const handleCreateGroup = ({ name, avatar, members }) => {
+    const newGroup = {
+      id: 'group_' + Date.now(),
+      isGroup: true,
+      name,
+      avatar,
+      about: 'Group created by ' + (currentUser?.name || 'You'),
+      isOnline: false,
+      lastSeen: 'Group',
+      unreadCount: 0,
+      members,
+      messages: [
+        {
+          id: 'gm_' + Date.now(),
+          senderId: 'user',
+          senderName: currentUser?.name,
+          text: `Hey everyone! Welcome to ${name} 🎉`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: Date.now(),
+          status: 'read'
+        }
+      ]
+    };
+
+    const updated = [newGroup, ...contacts];
+    setContacts(updated);
+    saveStoredContacts(updated);
+    handleSelectContact(newGroup.id);
+  };
+
+  // Start Call
+  const handleStartCall = (contact, isVideo) => {
+    setCallState({
+      isOpen: true,
+      isIncoming: false,
+      contact,
+      isVideo
+    });
+    broadcastChange('START_CALL', { contact: currentUser, isVideo });
+  };
+
+  const handleEndCall = () => {
+    setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
+    broadcastChange('END_CALL', {});
+    p2pRef.current?.endCall();
+  };
+
+  // If user is not logged in, render WhatsApp Phone Onboarding
+  if (!currentUser) {
+    return <PhoneLogin onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const activeContact = activeContactId ? (contacts.find((c) => c.id === activeContactId) || null) : null;
+
+  return (
+    <div className="wa-app-wrapper">
+      <div className="wa-app-container">
+        {/* Sidebar */}
+        <div className={`wa-sidebar-wrapper ${showMobileChat ? 'mobile-hidden' : ''}`}>
+          <Sidebar
+            currentUser={currentUser}
+            contacts={contacts}
+            activeContactId={activeContactId}
+            onSelectContact={handleSelectContact}
+            onOpenNewGroup={() => setIsNewGroupOpen(true)}
+            onOpenPartnerModal={() => setIsPartnerModalOpen(true)}
+            partnerOnlineStatus={partnerOnlineStatus}
+            onStartCall={handleStartCall}
+            stories={stories}
+            onAddStory={handleAddStory}
+            onReplyToStory={handleReplyToStory}
+            onDeleteStory={handleDeleteStory}
+            onDeleteStoryItem={handleDeleteStoryItem}
+            theme={settings.theme}
+            onToggleTheme={handleToggleTheme}
+            onUpdateProfile={handleUpdateProfile}
+            onAddContact={handleAddContact}
+            onOpenDisguise={() => setIsDisguiseOpen(true)}
+            onLogout={handleLogout}
+          />
+        </div>
+
+        {/* Chat View Area */}
+        <div className={`wa-chat-area-wrapper ${!showMobileChat ? 'mobile-hidden' : ''}`}>
+          <ChatArea
+            activeContact={activeContact}
+            currentUser={currentUser}
+            partnerOnlineStatus={partnerOnlineStatus}
+            onBack={handleBackToContacts}
+            onStartCall={handleStartCall}
+            onSendMessage={handleSendMessage}
+            onClearChat={handleClearChat}
+          />
+        </div>
+      </div>
+
+      {/* Audio & Video Calling Screen */}
+      <CallModal
+        callState={callState}
+        onEndCall={handleEndCall}
+        onAcceptCall={() => {}}
+      />
+
+      {/* Create New Group Modal */}
+      <NewGroupModal
+        isOpen={isNewGroupOpen}
+        onClose={() => setIsNewGroupOpen(false)}
+        contacts={contacts}
+        onCreateGroup={handleCreateGroup}
+      />
+
+      {/* Connect Partner Over Internet Modal */}
+      <PartnerConnectModal
+        isOpen={isPartnerModalOpen}
+        onClose={() => setIsPartnerModalOpen(false)}
+        currentUser={currentUser}
+        partnerOnlineStatus={partnerOnlineStatus}
+        onConnectPartner={handleConnectPartner}
+      />
+
+      {/* Disguise / Secret Calculator Screen */}
+      <DisguiseModal
+        isOpen={isDisguiseOpen}
+        onClose={() => setIsDisguiseOpen(false)}
+        secretPin={settings.disguisePin || '1234'}
+      />
+    </div>
+  );
+}
