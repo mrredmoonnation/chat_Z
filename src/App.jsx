@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
-  broadcastChange, subscribeToBroadcast, AVATAR_PRESETS
+  broadcastChange, subscribeToBroadcast, registerUsername, AVATAR_PRESETS
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
@@ -47,6 +47,13 @@ export default function App() {
     // Push new history state
     if (!window.history.state || window.history.state.waView !== 'chat' || window.history.state.contactId !== id) {
       window.history.pushState({ waView: 'chat', contactId: id }, '');
+    }
+
+    // Auto-connect to partner peer over P2P Internet immediately
+    const targetContact = contacts.find((c) => c.id === id);
+    const targetIdentifier = targetContact?.username || (id?.startsWith('wa_user_') ? id.replace('wa_user_', '') : targetContact?.phone);
+    if (targetIdentifier && p2pRef.current) {
+      p2pRef.current.connectToPartner(targetIdentifier);
     }
   };
 
@@ -131,11 +138,12 @@ export default function App() {
 
   // Initialize Online P2P Internet Connection when logged in
   useEffect(() => {
-    const userIdentifier = currentUser?.phone || currentUser?.email || currentUser?.id;
+    const userIdentifier = currentUser?.username || currentUser?.phone || currentUser?.email || currentUser?.id;
     if (!userIdentifier) return;
 
     const p2p = new OnlineP2PService({
       myIdentifier: userIdentifier,
+      myProfile: currentUser,
       onStatusChange: ({ status, partnerId }) => {
         if (status === 'partner_connected') {
           setPartnerOnlineStatus('connected');
@@ -179,11 +187,67 @@ export default function App() {
           });
         }
       },
-      onMessageReceived: (payload) => {
-        if (payload?.type === 'CHAT_MESSAGE') {
+      onMessageReceived: (payload, peerId) => {
+        if (payload?.type === 'PEER_HANDSHAKE' && payload.profile) {
+          const prof = payload.profile;
+          if (prof.username) {
+            registerUsername(prof.username, prof);
+          }
           setContacts((prev) => {
-            const partner = prev.find((c) => c.isPartner || c.id === payload.senderId);
-            const targetId = partner ? partner.id : (payload.senderId || 'partner_live');
+            const cleanPeerId = peerId || (prof.username ? `wa_user_${prof.username}` : null);
+            const existing = prev.find((c) => (cleanPeerId && c.id === cleanPeerId) || (prof.username && c.username === prof.username));
+            if (existing) {
+              const updated = prev.map((c) =>
+                c.id === existing.id
+                  ? {
+                      ...c,
+                      name: prof.name || c.name,
+                      avatar: prof.avatar || c.avatar,
+                      about: prof.about || c.about,
+                      isOnline: true,
+                      lastSeen: 'Online (Live P2P)'
+                    }
+                  : c
+              );
+              saveStoredContacts(updated);
+              return updated;
+            } else if (cleanPeerId) {
+              const newContact = {
+                id: cleanPeerId,
+                username: prof.username || null,
+                isPartner: true,
+                name: prof.name || prof.username || 'Partner',
+                avatar: prof.avatar || AVATAR_PRESETS[0],
+                about: prof.about || 'Connected Live on Chatz',
+                isOnline: true,
+                lastSeen: 'Online (Live P2P)',
+                unreadCount: 0,
+                messages: []
+              };
+              const updated = [newContact, ...prev];
+              saveStoredContacts(updated);
+              return updated;
+            }
+            return prev;
+          });
+          return;
+        }
+
+        if (payload?.type === 'CHAT_MESSAGE') {
+          const senderUsername = payload.senderUsername;
+          const senderPeerId = peerId || payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
+          if (senderUsername) {
+            registerUsername(senderUsername, {
+              id: senderPeerId,
+              username: senderUsername,
+              name: payload.senderName || senderUsername,
+              avatar: payload.senderAvatar || AVATAR_PRESETS[0]
+            });
+          }
+
+          setContacts((prev) => {
+            const partner = prev.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
+            const targetId = partner ? partner.id : senderPeerId;
             const incomingMsg = {
               ...payload.message,
               id: 'p2p_' + Date.now(),
@@ -196,7 +260,9 @@ export default function App() {
                   return {
                     ...c,
                     messages: [...(c.messages || []), incomingMsg],
-                    unreadCount: (c.unreadCount || 0) + 1
+                    unreadCount: (c.unreadCount || 0) + 1,
+                    isOnline: true,
+                    lastSeen: 'Online (Live P2P)'
                   };
                 }
                 return c;
@@ -206,10 +272,11 @@ export default function App() {
             } else {
               const newPartner = {
                 id: targetId,
+                username: senderUsername || null,
                 isPartner: true,
-                name: payload.senderName || 'Partner',
-                avatar: AVATAR_PRESETS[0],
-                about: 'Connected Live',
+                name: payload.senderName || senderUsername || 'Friend',
+                avatar: payload.senderAvatar || AVATAR_PRESETS[0],
+                about: 'Connected Live on Chatz',
                 isOnline: true,
                 lastSeen: 'Online (Live P2P)',
                 unreadCount: 1,
@@ -221,6 +288,26 @@ export default function App() {
             }
           });
           sounds.playMessageReceived();
+
+          // Acknowledge delivery over P2P
+          if (payload.message?.id) {
+            p2pRef.current?.sendData({
+              type: 'P2P_DELIVERED',
+              messageId: payload.message.id
+            }, senderPeerId);
+          }
+        } else if (payload?.type === 'P2P_DELIVERED') {
+          // Double tick delivery update
+          setContacts((prev) => {
+            const updated = prev.map((c) => ({
+              ...c,
+              messages: (c.messages || []).map((m) =>
+                m.id === payload.messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
+              )
+            }));
+            saveStoredContacts(updated);
+            return updated;
+          });
         }
       },
       onIncomingCall: (mediaCall) => {
@@ -253,7 +340,7 @@ export default function App() {
       p2p.destroy();
       p2pRef.current = null;
     };
-  }, [currentUser?.phone, currentUser?.email, currentUser?.id]);
+  }, [currentUser?.username, currentUser?.phone, currentUser?.email, currentUser?.id]);
 
   // Handle manual partner connection
   const handleConnectPartner = (phoneOrId) => {
@@ -424,11 +511,21 @@ export default function App() {
     // Send over BroadcastChannel (local tabs)
     broadcastChange('NEW_MESSAGE', { contactId: activeContactId, message: newMsg });
 
-    // Send over Internet P2P directly to partner's phone if connected!
+    // Target peer ID for this specific contact
+    const targetContact = contacts.find((c) => c.id === activeContactId);
+    const targetPeerId = targetContact?.username 
+      ? `wa_user_${targetContact.username}` 
+      : (activeContactId.startsWith('wa_user_') ? activeContactId : targetContact?.phone);
+
+    // Send over Internet P2P directly to recipient's phone if connected!
     const sentInternet = p2pRef.current?.sendData({
       type: 'CHAT_MESSAGE',
-      message: newMsg
-    });
+      message: newMsg,
+      senderId: currentUser?.username ? `wa_user_${currentUser.username}` : currentUser?.id,
+      senderUsername: currentUser?.username || null,
+      senderName: currentUser?.name || 'Friend',
+      senderAvatar: currentUser?.avatar || null
+    }, targetPeerId);
 
     // 2. Progression: Transition from 'sent' to 'delivered' (double grey tick) after network ping (600ms)
     setTimeout(() => {

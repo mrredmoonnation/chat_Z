@@ -14,7 +14,8 @@ const GOOGLE_ICE_CONFIG = {
 
 export const sanitizePeerIdentifier = (idStr) => {
   if (!idStr) return Math.random().toString(36).substring(2, 9);
-  let str = idStr.trim();
+  let str = String(idStr).trim();
+
   // If user pasted a full URL with ?partner=...
   if (str.includes('partner=')) {
     try {
@@ -26,35 +27,48 @@ export const sanitizePeerIdentifier = (idStr) => {
       // ignore
     }
   }
-  // Strip leading '@' if entered as @username
-  if (str.startsWith('@')) {
-    str = str.substring(1);
+
+  // Strip leading @ or wa_user_ prefixes iteratively
+  while (str.startsWith('@') || str.startsWith('wa_user_')) {
+    if (str.startsWith('@')) str = str.substring(1);
+    if (str.startsWith('wa_user_')) str = str.substring(8);
   }
-  const digitsOnly = str.replace(/[^0-9]/g, '');
-  if (digitsOnly.length >= 7) {
-    return digitsOnly;
+  str = str.trim();
+
+  // If it's purely a phone number (e.g. +91 9876543210 or 9876543210)
+  const isPhoneNumber = /^(\+|00)?[0-9\s\-()]{7,20}$/.test(str);
+  if (isPhoneNumber) {
+    const digitsOnly = str.replace(/[^0-9]/g, '');
+    if (digitsOnly.length >= 7) {
+      return digitsOnly;
+    }
   }
-  return str.toLowerCase().replace(/[^a-z0-9_-]/g, '_').substring(0, 32);
+
+  // Otherwise, it's a username or email handle: clean valid characters
+  return str.toLowerCase().replace(/[^a-z0-9_.]/g, '_').substring(0, 32);
 };
 
 export class OnlineP2PService {
   constructor({
     myPhoneNumber,
     myIdentifier,
+    myProfile,
     onMessageReceived,
     onIncomingCall,
     onStatusChange
   }) {
-    // Support phone number or email/WiFi identifier
+    // Support username as primary, or phone/email/WiFi identifier
     const rawId = myIdentifier || myPhoneNumber;
     const cleanId = sanitizePeerIdentifier(rawId);
     this.myPeerId = `wa_user_${cleanId}`;
+    this.myProfile = myProfile || null;
     this.onMessageReceived = onMessageReceived;
     this.onIncomingCall = onIncomingCall;
     this.onStatusChange = onStatusChange;
 
     this.peer = null;
     this.activeDataConnection = null;
+    this.connections = new Map(); // cleanPeerId -> DataConnection
     this.activeMediaCall = null;
     this.targetPeerId = null;
     this.isConnectedOnline = false;
@@ -88,23 +102,19 @@ export class OnlineP2PService {
       });
 
       this.peer.on('error', (err) => {
-        // If ID is already taken (e.g. from previous session/tab), connect with clean suffix
-        if (err.type === 'unavailable-id') {
-          try {
-            this.peer.destroy();
-          } catch (e) {}
-          const fallbackId = `${this.myPeerId}_${Math.floor(Math.random() * 1000)}`;
-          this.myPeerId = fallbackId;
-          this.peer = new Peer(fallbackId, GOOGLE_ICE_CONFIG);
-          this.peer.on('open', (id) => {
-            this.isConnectedOnline = true;
-            this.onStatusChange && this.onStatusChange({ status: 'online', myId: id });
-          });
-          this.peer.on('connection', (conn) => this.setupDataConnection(conn));
-          this.peer.on('call', (mediaCall) => {
-            this.activeMediaCall = mediaCall;
-            this.onIncomingCall && this.onIncomingCall(mediaCall);
-          });
+        console.warn('PeerJS event error:', err.type, err.message);
+        if (err.type === 'peer-unavailable') {
+          this.onStatusChange && this.onStatusChange({ status: 'partner_offline', message: err.message });
+        } else if (err.type === 'unavailable-id') {
+          // If ID still tied to previous session on cloud server, retry briefly
+          console.warn('Peer ID temporarily busy on server, re-verifying...');
+          setTimeout(() => {
+            if (!this.isConnectedOnline && this.peer && !this.peer.destroyed) {
+              try {
+                this.peer.reconnect();
+              } catch (e) {}
+            }
+          }, 2000);
         }
       });
 
@@ -127,48 +137,107 @@ export class OnlineP2PService {
     }
   }
 
-  // Connect to partner phone (e.g. girlfriend's phone number or ID)
+  // Connect to partner phone or @username
   connectToPartner(partnerPhoneOrId) {
-    if (!partnerPhoneOrId) return;
-    const cleanTarget = partnerPhoneOrId.startsWith('wa_user_')
-      ? partnerPhoneOrId
-      : `wa_user_${sanitizePeerIdentifier(partnerPhoneOrId)}`;
+    if (!partnerPhoneOrId) return null;
+    const cleanRaw = sanitizePeerIdentifier(partnerPhoneOrId);
+    const cleanTarget = `wa_user_${cleanRaw}`;
+
+    // Don't connect to self
+    if (cleanTarget === this.myPeerId) return null;
 
     this.targetPeerId = cleanTarget;
-    if (!this.peer || !this.isConnectedOnline) return;
+    if (!this.peer || !this.isConnectedOnline) return null;
 
-    const conn = this.peer.connect(cleanTarget, {
-      reliable: true
-    });
+    // Reuse existing open connection if available
+    const existing = this.connections.get(cleanTarget);
+    if (existing && existing.open) {
+      this.activeDataConnection = existing;
+      this.onStatusChange && this.onStatusChange({ status: 'partner_connected', partnerId: cleanTarget });
+      return existing;
+    }
 
-    this.setupDataConnection(conn);
+    try {
+      const conn = this.peer.connect(cleanTarget, {
+        reliable: true
+      });
+      this.setupDataConnection(conn);
+      return conn;
+    } catch (e) {
+      console.warn('Failed to connect to partner peer:', cleanTarget, e);
+      return null;
+    }
   }
 
   // Setup data connection event handlers
   setupDataConnection(conn) {
+    if (!conn) return;
+    this.connections.set(conn.peer, conn);
     this.activeDataConnection = conn;
 
     conn.on('open', () => {
-      console.log('Data connection opened with partner:', conn.peer);
+      console.log('Data connection opened with peer:', conn.peer);
+      this.connections.set(conn.peer, conn);
+      this.activeDataConnection = conn;
       this.onStatusChange && this.onStatusChange({ status: 'partner_connected', partnerId: conn.peer });
+
+      // Immediate mutual profile handshake so partner receives display name, avatar, bio
+      if (this.myProfile) {
+        try {
+          conn.send({
+            type: 'PEER_HANDSHAKE',
+            profile: this.myProfile
+          });
+        } catch (e) {
+          console.warn('Failed to send handshake:', e);
+        }
+      }
     });
 
     conn.on('data', (data) => {
-      console.log('Received data over internet:', data);
-      this.onMessageReceived && this.onMessageReceived(data);
+      console.log('Received data over internet from', conn.peer, data);
+      this.onMessageReceived && this.onMessageReceived(data, conn.peer);
     });
 
     conn.on('close', () => {
-      console.log('Data connection closed with partner');
-      this.onStatusChange && this.onStatusChange({ status: 'partner_disconnected' });
+      console.log('Data connection closed with peer:', conn.peer);
+      this.connections.delete(conn.peer);
+      if (this.activeDataConnection === conn) {
+        this.activeDataConnection = null;
+      }
+      this.onStatusChange && this.onStatusChange({ status: 'partner_disconnected', partnerId: conn.peer });
+    });
+
+    conn.on('error', (err) => {
+      console.warn('Connection error with peer:', conn.peer, err);
     });
   }
 
   // Send message or event to partner over the internet
-  sendData(payload) {
-    if (this.activeDataConnection && this.activeDataConnection.open) {
-      this.activeDataConnection.send(payload);
-      return true;
+  sendData(payload, targetPeerId = null) {
+    let conn = null;
+
+    if (targetPeerId) {
+      const cleanRaw = sanitizePeerIdentifier(targetPeerId);
+      const cleanTarget = `wa_user_${cleanRaw}`;
+      conn = this.connections.get(cleanTarget);
+      if (!conn || !conn.open) {
+        conn = this.connectToPartner(cleanTarget);
+      }
+    }
+
+    if (!conn || !conn.open) {
+      conn = this.activeDataConnection;
+    }
+
+    if (conn && conn.open) {
+      try {
+        conn.send(payload);
+        return true;
+      } catch (e) {
+        console.warn('Failed to send payload over P2P:', e);
+        return false;
+      }
     }
     return false;
   }
@@ -204,14 +273,20 @@ export class OnlineP2PService {
 
   // Destroy on logout
   destroy() {
+    this.connections.forEach((conn) => {
+      try { conn.close(); } catch (e) {}
+    });
+    this.connections.clear();
     if (this.activeDataConnection) {
-      this.activeDataConnection.close();
+      try { this.activeDataConnection.close(); } catch (e) {}
+      this.activeDataConnection = null;
     }
     if (this.activeMediaCall) {
-      this.activeMediaCall.close();
+      try { this.activeMediaCall.close(); } catch (e) {}
+      this.activeMediaCall = null;
     }
     if (this.peer) {
-      this.peer.destroy();
+      try { this.peer.destroy(); } catch (e) {}
       this.peer = null;
     }
   }

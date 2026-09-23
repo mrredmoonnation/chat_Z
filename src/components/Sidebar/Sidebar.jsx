@@ -269,14 +269,22 @@ export default function Sidebar({
   }, [searchQuery, contacts, currentUser]);
 
   // Modal Instagram-style user discovery
+  const cleanModalQ = cleanUsername(modalSearchQuery);
   const modalSearchResults = React.useMemo(() => {
-    if (!modalSearchQuery.trim()) return [];
-    const all = searchUsersByUsername(modalSearchQuery);
+    if (!cleanModalQ) return [];
+    const all = searchUsersByUsername(cleanModalQ);
     return all.filter((u) => 
       u.id !== currentUser?.id && 
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase()
     );
-  }, [modalSearchQuery, currentUser]);
+  }, [cleanModalQ, currentUser]);
+
+  // Check if search query matches user's own identity or an exact existing contact
+  const hasExactContact = contacts.some(
+    (c) => c.username?.toLowerCase() === cleanQ || c.name?.toLowerCase() === cleanQ || c.id === ('wa_user_' + cleanQ)
+  );
+  const isSelf = currentUser?.username?.toLowerCase() === cleanQ || currentUser?.id === ('wa_user_' + cleanQ);
+  const showDirectChatOption = Boolean(cleanQ && cleanQ.length >= 2 && !hasExactContact && !isSelf);
 
   return (
     <aside className="wa-sidebar">
@@ -493,9 +501,20 @@ export default function Sidebar({
               <input
                 id="searchChatsInput"
                 type="text"
-                placeholder="Search contacts & messages"
+                placeholder="Search contacts, @usernames, or messages"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (filteredContacts.length === 1) {
+                      onSelectContact(filteredContacts[0].id);
+                      setSearchQuery('');
+                    } else if (showDirectChatOption) {
+                      handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ });
+                    }
+                  }
+                }}
               />
               {searchQuery && (
                 <button
@@ -552,32 +571,81 @@ export default function Sidebar({
                     </button>
                   </div>
                 </div>
-              ) : globalUserResults.length > 0 ? (
+              ) : (globalUserResults.length > 0 || showDirectChatOption) ? (
                 <div className="wa-global-search-section" style={{ padding: '8px 12px' }}>
-                  <div className="wa-global-search-header">
-                    <AtSign size={14} />
-                    <span>Users found on Chatz (@users)</span>
-                  </div>
-                  {globalUserResults.map((u) => (
-                    <div key={u.id || u.username} className="wa-global-user-item">
-                      <div className="wa-avatar" style={{ width: 42, height: 42 }}>
-                        <img src={u.avatar || AVATAR_PRESETS[0]} alt={u.name} />
+                  {globalUserResults.length > 0 && (
+                    <>
+                      <div className="wa-global-search-header">
+                        <AtSign size={14} />
+                        <span>Registered Users Found (@users)</span>
                       </div>
-                      <div className="wa-global-user-info">
-                        <div className="wa-global-user-name">{u.name}</div>
-                        <div className="wa-global-user-handle">@{u.username}</div>
-                        {u.about && <div className="wa-global-user-about">{u.about}</div>}
+                      {globalUserResults.map((u) => (
+                        <div key={u.id || u.username} className="wa-global-user-item">
+                          <div className="wa-avatar" style={{ width: 42, height: 42 }}>
+                            <img src={u.avatar || AVATAR_PRESETS[0]} alt={u.name} />
+                          </div>
+                          <div className="wa-global-user-info">
+                            <div className="wa-global-user-name">{u.name}</div>
+                            <div className="wa-global-user-handle">@{u.username}</div>
+                            {u.about && <div className="wa-global-user-about">{u.about}</div>}
+                          </div>
+                          <button 
+                            type="button" 
+                            className="wa-global-user-chat-btn"
+                            onClick={() => handleConnectWithGlobalUser(u)}
+                          >
+                            <MessageSquare size={14} />
+                            <span>Chat</span>
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Direct Connect Option for any entered username */}
+                  {showDirectChatOption && !globalUserResults.some(u => u.username?.toLowerCase() === cleanQ) && (
+                    <div style={{ marginTop: globalUserResults.length > 0 ? 12 : 4 }}>
+                      <div className="wa-global-search-header" style={{ color: 'var(--wa-green-light)' }}>
+                        <Sparkles size={14} />
+                        <span>Start Direct P2P Chat</span>
                       </div>
-                      <button 
-                        type="button" 
-                        className="wa-global-user-chat-btn"
-                        onClick={() => handleConnectWithGlobalUser(u)}
+                      <div 
+                        className="wa-global-user-item" 
+                        style={{ 
+                          backgroundColor: 'var(--wa-bg-panel)', 
+                          border: '1.5px solid var(--wa-green)',
+                          boxShadow: 'var(--wa-shadow-sm)'
+                        }}
                       >
-                        <MessageSquare size={14} />
-                        <span>Chat</span>
-                      </button>
+                        <div className="wa-avatar" style={{ width: 42, height: 42 }}>
+                          <img src={generateBitmojiAvatar(cleanQ, 'male')} alt={cleanQ} />
+                          <div className="wa-avatar-badge" style={{ backgroundColor: 'var(--wa-green)' }} />
+                        </div>
+                        <div className="wa-global-user-info">
+                          <div className="wa-global-user-name">@{cleanQ}</div>
+                          <div className="wa-global-user-handle" style={{ color: 'var(--wa-green-light)', fontWeight: 500 }}>
+                            ⚡ Connect Live over Internet
+                          </div>
+                          <div className="wa-global-user-about">Press Enter or click Chat to begin</div>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="wa-global-user-chat-btn"
+                          onClick={() => handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ })}
+                          style={{ 
+                            backgroundColor: 'var(--wa-green)', 
+                            color: '#111b21', 
+                            fontWeight: 600,
+                            padding: '8px 16px',
+                            borderRadius: 20
+                          }}
+                        >
+                          <MessageSquare size={14} />
+                          <span>Chat</span>
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               ) : (
                 <div className="wa-no-chats-found">
@@ -588,7 +656,7 @@ export default function Sidebar({
                     No chats found
                   </div>
                   <div style={{ fontSize: '13px', color: 'var(--wa-text-secondary)', marginBottom: '8px' }}>
-                    No contacts or @usernames matching "{searchQuery}"
+                    Type at least 2 characters of @username to start a chat
                   </div>
                   <button
                     type="button"
@@ -707,6 +775,44 @@ export default function Sidebar({
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Direct Connect option if user searches for an unadded @username */}
+                {showDirectChatOption && !globalUserResults.some(u => u.username?.toLowerCase() === cleanQ) && (
+                  <div style={{ padding: '10px 12px', borderTop: '1px solid var(--wa-border)' }}>
+                    <div 
+                      className="wa-global-user-item" 
+                      style={{ 
+                        backgroundColor: 'var(--wa-bg-panel-secondary)', 
+                        border: '1.5px solid var(--wa-green)',
+                        borderRadius: 10,
+                        cursor: 'pointer' 
+                      }}
+                      onClick={() => handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ })}
+                    >
+                      <div className="wa-avatar" style={{ width: 40, height: 40 }}>
+                        <img src={generateBitmojiAvatar(cleanQ, 'male')} alt={cleanQ} />
+                        <div className="wa-avatar-badge" style={{ backgroundColor: 'var(--wa-green)' }} />
+                      </div>
+                      <div className="wa-global-user-info" style={{ flex: 1 }}>
+                        <div className="wa-global-user-name" style={{ fontSize: '13.5px' }}>Start new chat with @{cleanQ}</div>
+                        <div className="wa-global-user-handle" style={{ color: 'var(--wa-green-light)', fontSize: '12px' }}>
+                          ⚡ Connect Live over Internet P2P
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="wa-global-user-chat-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ });
+                        }}
+                      >
+                        <MessageSquare size={14} />
+                        <span>Chat</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
@@ -1039,6 +1145,16 @@ export default function Sidebar({
                 type="text"
                 value={modalSearchQuery}
                 onChange={(e) => setModalSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (modalSearchResults.length === 1) {
+                      handleConnectWithGlobalUser(modalSearchResults[0]);
+                    } else if (cleanModalQ && cleanModalQ.length >= 2) {
+                      handleConnectWithGlobalUser({ username: cleanModalQ, name: cleanModalQ });
+                    }
+                  }
+                }}
                 placeholder="Search by @username or contact name..."
                 className="wa-modal-search-input"
                 autoFocus
@@ -1087,9 +1203,43 @@ export default function Sidebar({
               </div>
             )}
 
-            {modalSearchQuery.trim() && modalSearchResults.length === 0 && (
+            {/* Direct Connect Option for searched @username */}
+            {cleanModalQ && cleanModalQ.length >= 2 && !modalSearchResults.some(u => u.username?.toLowerCase() === cleanModalQ) && (
+              <div className="wa-modal-user-results" style={{ marginTop: modalSearchResults.length > 0 ? 10 : 0 }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--wa-green-light)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={14} />
+                  <span>Start Chat with @{cleanModalQ}</span>
+                </div>
+                <div className="wa-modal-user-item" style={{ border: '1.5px solid var(--wa-green)', backgroundColor: 'var(--wa-bg-panel-secondary)' }}>
+                  <div className="wa-avatar" style={{ width: 44, height: 44 }}>
+                    <img src={generateBitmojiAvatar(cleanModalQ, 'male')} alt={cleanModalQ} />
+                    <div className="wa-avatar-badge" style={{ backgroundColor: 'var(--wa-green)' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '14.5px', color: 'var(--wa-text-primary)' }}>@{cleanModalQ}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--wa-green-light)', fontWeight: 500 }}>
+                      ⚡ Connect Live on Internet P2P
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--wa-text-secondary)' }}>
+                      Press Enter or click Chat to begin conversation
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="wa-global-user-chat-btn"
+                    onClick={() => handleConnectWithGlobalUser({ username: cleanModalQ, name: cleanModalQ })}
+                    style={{ backgroundColor: 'var(--wa-green)', color: '#111b21', fontWeight: 600, padding: '8px 16px', borderRadius: 20 }}
+                  >
+                    <MessageSquare size={14} />
+                    <span>Chat</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {modalSearchQuery.trim() && !cleanModalQ && (
               <div style={{ textAlign: 'center', padding: '14px 8px', color: 'var(--wa-text-secondary)', fontSize: '13px' }}>
-                No registered user found matching "<strong>{modalSearchQuery}</strong>".
+                Type at least 2 characters of @username to start a chat.
               </div>
             )}
 
