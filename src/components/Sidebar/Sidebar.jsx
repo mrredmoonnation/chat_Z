@@ -9,8 +9,10 @@ import {
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
   isUsernameAvailable, cleanUsername, 
-  isValidUsernameFormat, registerUsername, searchUsersByUsername 
+  isValidUsernameFormat, registerUsername, searchUsersByUsername,
+  subscribeToBroadcast
 } from '../../services/store';
+import { fetchCloudUsers } from '../../services/cloudRegistry';
 import StatusView from '../Status/StatusView';
 
 const DRAWER_BIO_PRESETS = [
@@ -254,6 +256,31 @@ export default function Sidebar({
     return nameMatch || userMatch || phoneMatch || aboutMatch || messageMatch;
   });
 
+  // Registry sync tick for real-time global user updates
+  const [registryTick, setRegistryTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = subscribeToBroadcast((data) => {
+      if (data?.type === 'USERNAMES_UPDATED') {
+        setRegistryTick((prev) => prev + 1);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Modal Instagram-style user query
+  const cleanModalQ = cleanUsername(modalSearchQuery);
+
+  // Fetch latest global users on typing search
+  useEffect(() => {
+    if (searchQuery.trim().length >= 2 || (cleanModalQ && cleanModalQ.length >= 2)) {
+      const timer = setTimeout(() => {
+        fetchCloudUsers().then(() => setRegistryTick((prev) => prev + 1));
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery, cleanModalQ]);
+
   // Global Instagram-style user discovery
   const globalUserResults = React.useMemo(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) return [];
@@ -266,10 +293,9 @@ export default function Sidebar({
       !existingIds.has(u.id) &&
       !existingUsernames.has(u.username?.toLowerCase())
     );
-  }, [searchQuery, contacts, currentUser]);
+  }, [searchQuery, contacts, currentUser, registryTick]);
 
   // Modal Instagram-style user discovery
-  const cleanModalQ = cleanUsername(modalSearchQuery);
   const modalSearchResults = React.useMemo(() => {
     if (!cleanModalQ) return [];
     const all = searchUsersByUsername(cleanModalQ);
@@ -277,7 +303,7 @@ export default function Sidebar({
       u.id !== currentUser?.id && 
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase()
     );
-  }, [cleanModalQ, currentUser]);
+  }, [cleanModalQ, currentUser, registryTick]);
 
   // Check if search query matches user's own identity or an exact existing contact
   const hasExactContact = contacts.some(

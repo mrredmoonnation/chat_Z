@@ -1,6 +1,7 @@
 // Zero-Cost PeerJS Internet P2P Engine for Real Devices Across Different Networks
 
 import Peer from 'peerjs';
+import { sendCloudInboxMessage } from './cloudRegistry';
 
 const GOOGLE_ICE_CONFIG = {
   config: {
@@ -44,8 +45,8 @@ export const sanitizePeerIdentifier = (idStr) => {
     }
   }
 
-  // Otherwise, it's a username or email handle: clean valid characters
-  return str.toLowerCase().replace(/[^a-z0-9_.]/g, '_').substring(0, 32);
+  // Otherwise, it's a username or email handle: clean valid characters (only a-z, 0-9, and underscore for PeerJS server compatibility)
+  return str.toLowerCase().replace(/[^a-z0-9_]/g, '_').substring(0, 32);
 };
 
 export class OnlineP2PService {
@@ -69,6 +70,7 @@ export class OnlineP2PService {
     this.peer = null;
     this.activeDataConnection = null;
     this.connections = new Map(); // cleanPeerId -> DataConnection
+    this.pendingQueue = new Map(); // cleanPeerId -> [messages...]
     this.activeMediaCall = null;
     this.targetPeerId = null;
     this.isConnectedOnline = false;
@@ -192,6 +194,16 @@ export class OnlineP2PService {
           console.warn('Failed to send handshake:', e);
         }
       }
+
+      // Flush any queued messages for this peer!
+      const queued = this.pendingQueue.get(conn.peer) || [];
+      if (queued.length > 0) {
+        console.log(`Flushing ${queued.length} queued messages to ${conn.peer}`);
+        queued.forEach((msg) => {
+          try { conn.send(msg); } catch (e) { console.warn('Queue flush err:', e); }
+        });
+        this.pendingQueue.delete(conn.peer);
+      }
     });
 
     conn.on('data', (data) => {
@@ -216,29 +228,50 @@ export class OnlineP2PService {
   // Send message or event to partner over the internet
   sendData(payload, targetPeerId = null) {
     let conn = null;
+    let cleanTarget = null;
+    let targetUsername = null;
 
     if (targetPeerId) {
       const cleanRaw = sanitizePeerIdentifier(targetPeerId);
-      const cleanTarget = `wa_user_${cleanRaw}`;
+      targetUsername = cleanRaw;
+      cleanTarget = `wa_user_${cleanRaw}`;
       conn = this.connections.get(cleanTarget);
       if (!conn || !conn.open) {
         conn = this.connectToPartner(cleanTarget);
       }
+    } else if (this.targetPeerId) {
+      cleanTarget = this.targetPeerId;
+      targetUsername = cleanTarget.replace('wa_user_', '');
+      conn = this.connections.get(cleanTarget) || this.activeDataConnection;
     }
 
     if (!conn || !conn.open) {
       conn = this.activeDataConnection;
     }
 
+    // 1. If connection is already open, send directly over P2P!
     if (conn && conn.open) {
       try {
         conn.send(payload);
         return true;
       } catch (e) {
         console.warn('Failed to send payload over P2P:', e);
-        return false;
       }
     }
+
+    // 2. If connection is still opening or peer is connecting, queue it!
+    if (cleanTarget) {
+      const list = this.pendingQueue.get(cleanTarget) || [];
+      list.push(payload);
+      this.pendingQueue.set(cleanTarget, list);
+
+      // 3. Also relay via Cloud Inbox so message is delivered even if receiver is offline or on restricted NAT
+      if (payload?.type === 'CHAT_MESSAGE' && targetUsername) {
+        sendCloudInboxMessage(targetUsername, payload);
+      }
+      return true;
+    }
+
     return false;
   }
 

@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
-  broadcastChange, subscribeToBroadcast, registerUsername, AVATAR_PRESETS
+  broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, AVATAR_PRESETS
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
+import { fetchCloudUsers, publishUserToCloud, pollCloudInbox } from './services/cloudRegistry';
 import PhoneLogin from './components/Auth/PhoneLogin';
 import Sidebar from './components/Sidebar/Sidebar';
 import ChatArea from './components/Chat/ChatArea';
@@ -15,7 +16,15 @@ import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
 import DisguiseModal from './components/Privacy/DisguiseModal';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [currentUser, setCurrentUser] = useState(() => {
+    const u = getStoredUser();
+    if (u && !u.username) {
+      const derived = cleanUsername((u.email || u.name || '').split('@')[0]) || ('user_' + Math.floor(Math.random() * 1000));
+      u.username = derived;
+      saveStoredUser(u);
+    }
+    return u;
+  });
   const [contacts, setContacts] = useState(() => getStoredContacts());
   const [activeContactId, setActiveContactId] = useState(null);
   const [stories, setStories] = useState(() => getStoredStories());
@@ -135,6 +144,83 @@ export default function App() {
       document.documentElement.removeAttribute('data-theme');
     }
   }, [settings.theme]);
+
+  // Global Cloud Directory Sync & Offline Inbox Delivery
+  useEffect(() => {
+    // Initial fetch of all global registered users
+    fetchCloudUsers();
+
+    if (!currentUser?.username) return;
+
+    // Publish current user to cloud directory so everyone can find them
+    publishUserToCloud(currentUser);
+
+    // Incoming cloud messages delivery handler
+    const handleInboxMessages = (inboxMsgs) => {
+      if (!Array.isArray(inboxMsgs) || inboxMsgs.length === 0) return;
+
+      inboxMsgs.forEach((payload) => {
+        if (payload?.type === 'CHAT_MESSAGE' && payload.message) {
+          const senderUsername = payload.senderUsername;
+          const senderPeerId = payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
+          const incomingMsg = {
+            ...payload.message,
+            senderId: senderPeerId
+          };
+
+          setContacts((prev) => {
+            const partner = prev.find((c) => c.id === senderPeerId || (senderUsername && c.username === senderUsername));
+            if (partner) {
+              if (partner.messages?.some((m) => m.id === incomingMsg.id)) {
+                return prev;
+              }
+              const updated = prev.map((c) =>
+                c.id === partner.id
+                  ? {
+                      ...c,
+                      messages: [...(c.messages || []), incomingMsg],
+                      unreadCount: (c.unreadCount || 0) + 1,
+                      isOnline: true,
+                      lastSeen: 'Online'
+                    }
+                  : c
+              );
+              saveStoredContacts(updated);
+              return updated;
+            } else {
+              const newPartner = {
+                id: senderPeerId,
+                username: senderUsername || null,
+                isPartner: true,
+                name: payload.senderName || senderUsername || 'Friend',
+                avatar: payload.senderAvatar || AVATAR_PRESETS[0],
+                about: 'Connected on Chatz',
+                isOnline: true,
+                lastSeen: 'Online',
+                unreadCount: 1,
+                messages: [incomingMsg]
+              };
+              const updated = [newPartner, ...prev];
+              saveStoredContacts(updated);
+              return updated;
+            }
+          });
+          sounds.playMessageReceived();
+        }
+      });
+    };
+
+    // Immediate check
+    pollCloudInbox(currentUser.username, handleInboxMessages);
+
+    // Poll every 6 seconds
+    const interval = setInterval(() => {
+      fetchCloudUsers();
+      pollCloudInbox(currentUser.username, handleInboxMessages);
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [currentUser?.username]);
 
   // Initialize Online P2P Internet Connection when logged in
   useEffect(() => {
@@ -437,12 +523,18 @@ export default function App() {
   const handleLoginSuccess = (profile) => {
     setCurrentUser(profile);
     saveStoredUser(profile);
+    if (profile?.username) {
+      publishUserToCloud(profile);
+    }
   };
 
   // Handle Profile Updates (Name, Bio, Avatar)
   const handleUpdateProfile = (updatedProfile) => {
     setCurrentUser(updatedProfile);
     saveStoredUser(updatedProfile);
+    if (updatedProfile?.username) {
+      publishUserToCloud(updatedProfile);
+    }
   };
 
   // Handle Adding a New Contact

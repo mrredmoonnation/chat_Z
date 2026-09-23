@@ -16,6 +16,7 @@ import {
   signUpWithEmail, logInWithEmail, formatFirebaseAuthError 
 } from '../../services/firebase';
 import { sendRealEmailOtp } from '../../services/emailOtp';
+import { publishUserToCloud } from '../../services/cloudRegistry';
 
 const BIO_PRESETS = [
   '📶 Available on WiFi',
@@ -135,6 +136,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
     const verification = verifyAccountCredentials(cleanId, loginPassword);
     if (verification.success && verification.profile) {
       setSuccessMsg('Login successful! Welcome back.');
+      publishUserToCloud(verification.profile);
       setTimeout(() => {
         setLoading(false);
         onLoginSuccess(verification.profile);
@@ -156,6 +158,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
           about: 'Hey there! I am using Chatz'
         };
         setSuccessMsg('Login successful! Welcome back.');
+        publishUserToCloud(userProfile);
         setTimeout(() => {
           setLoading(false);
           onLoginSuccess(userProfile);
@@ -355,6 +358,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
     }
 
     setSuccessMsg('Account created successfully! Welcome to Chatz.');
+    publishUserToCloud(userProfile);
     setTimeout(() => {
       setLoading(false);
       onLoginSuccess(userProfile);
@@ -389,6 +393,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
           // If account exists, log in directly
           const existing = findAccountByUsernameOrEmail(userEmail);
           if (existing?.profile) {
+            publishUserToCloud(existing.profile);
             onLoginSuccess(existing.profile);
           } else {
             // New user: advance to set password & profile
