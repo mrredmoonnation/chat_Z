@@ -535,16 +535,6 @@ export default function Sidebar({
                   <span>New group</span>
                 </div>
 
-                <div
-                  onClick={() => {
-                    onOpenDisguise && onOpenDisguise();
-                    setShowMenu(false);
-                  }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: '#f59e0b' }}
-                >
-                  <Calculator size={16} />
-                  <span>Disguise mode</span>
-                </div>
 
                 <div
                   onClick={() => {
@@ -733,8 +723,8 @@ export default function Sidebar({
                   {showDirectChatOption && !globalUserResults.some(u => u.username?.toLowerCase() === cleanQ) && (
                     <div style={{ marginTop: globalUserResults.length > 0 ? 12 : 4 }}>
                       <div className="wa-global-search-header" style={{ color: 'var(--wa-green-light)' }}>
-                        <Sparkles size={14} />
-                        <span>Start Direct P2P Chat</span>
+                        <MessageSquare size={14} />
+                        <span>Start new chat</span>
                       </div>
                       <div 
                         className="wa-global-user-item" 

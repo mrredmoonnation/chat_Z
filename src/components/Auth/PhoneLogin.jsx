@@ -9,7 +9,7 @@ import {
   isUsernameAvailable, cleanUsername, 
   isValidUsernameFormat, registerUsername,
   saveAccountCredentials, findAccountByUsernameOrEmail, 
-  verifyAccountCredentials, DEFAULT_DEMO_ACCOUNTS 
+  verifyAccountCredentials
 } from '../../services/store';
 import { 
   isFirebaseConfigured, signInWithGoogle, 
@@ -117,18 +117,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
     return () => clearInterval(timer);
   }, [resendTimer]);
 
-  // ⚡ Instant 1-Click Demo Login
-  const handleQuickDemoLogin = (key = 'sonu') => {
-    setErrorMsg('');
-    setSuccessMsg('');
-    setLoading(false);
-    const demo = DEFAULT_DEMO_ACCOUNTS[key] || DEFAULT_DEMO_ACCOUNTS['sonu'];
-    if (demo && demo.profile) {
-      setSuccessMsg(`Welcome, ${demo.profile.name}! Logging in...`);
-      publishUserToCloud(demo.profile);
-      onLoginSuccess(demo.profile);
-    }
-  };
 
   // ================= 1. HANDLE USERNAME / EMAIL + PASSWORD LOGIN =================
   const handlePasswordLogin = async (e) => {
@@ -296,13 +284,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
     setLoading(true);
 
-    // Verify against real sent OTP code or test fallback codes (734921 / 123456)
-    if (
-      enteredCode === activeVerificationCode ||
-      enteredCode === '734921' ||
-      enteredCode === '123456' ||
-      enteredCode === '000000'
-    ) {
+    // Verify against real sent OTP code
+    if (activeVerificationCode && enteredCode === activeVerificationCode) {
       setTimeout(() => {
         setLoading(false);
         setSuccessMsg('Gmail verified! Now set your password and profile.');
@@ -311,7 +294,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
     } else {
       setTimeout(() => {
         setLoading(false);
-        setErrorMsg('Incorrect OTP code. Please enter the 6-digit code or click Auto-fill.');
+        setErrorMsg('Incorrect OTP code. Please enter the 6-digit code received on your Gmail.');
       }, 200);
     }
   };
@@ -676,31 +659,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <span>Continue with Google</span>
             </button>
 
-            {/* Quick Demo Google Profile Button */}
-            <button
-              type="button"
-              id="quickDemoGoogleBtn"
-              onClick={() => handleQuickDemoLogin('sonu')}
-              style={{
-                width: '100%',
-                marginTop: 8,
-                padding: '9px 12px',
-                borderRadius: 8,
-                border: '1px dashed rgba(255,255,255,0.25)',
-                background: 'rgba(255,255,255,0.04)',
-                color: 'var(--wa-text-secondary)',
-                fontSize: '12.5px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
-              title="Instant test account without Google popup"
-            >
-              <Sparkles size={14} color="#ffd700" />
-              <span>⚡ One-Click Demo Google Profile (Sonu Kumar)</span>
-            </button>
 
             {/* Switch Footer */}
             <div className="wa-auth-switch-footer" style={{ marginTop: 20 }}>
@@ -765,44 +723,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
                   autoFocus
                   required
                 />
-                <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignupEmail('sonu@gmail.com');
-                      setSignupName('Sonu Kumar');
-                    }}
-                    style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 6,
-                      padding: '4px 10px',
-                      color: 'var(--wa-text-secondary)',
-                      fontSize: '11.5px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Use sonu@gmail.com
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignupEmail('rahul@gmail.com');
-                      setSignupName('Rahul Sharma');
-                    }}
-                    style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: 6,
-                      padding: '4px 10px',
-                      color: 'var(--wa-text-secondary)',
-                      fontSize: '11.5px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Use rahul@gmail.com
-                  </button>
-                </div>
               </div>
 
               <button
@@ -889,41 +809,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
               </button>
             </p>
 
-            {/* Auto-fill test code banner */}
-            <div style={{ margin: '0 auto 16px auto', padding: '10px 14px', background: 'rgba(0,168,132,0.12)', border: '1px solid rgba(0,168,132,0.3)', borderRadius: 8, textAlign: 'center' }}>
-              <div style={{ fontSize: '12.5px', color: 'var(--wa-text-primary)', marginBottom: 8 }}>
-                Didn't get email yet? Use Instant Test Code: 
-                <strong style={{ color: 'var(--wa-green-light)', marginLeft: 6 }}>
-                  {activeVerificationCode || '734921'}
-                </strong>
-              </div>
-              <button
-                type="button"
-                id="autoFillOtpBtn"
-                onClick={() => {
-                  const codeToFill = activeVerificationCode || '734921';
-                  const digits = codeToFill.split('').slice(0, 6);
-                  while (digits.length < 6) digits.push('0');
-                  setOtp(digits);
-                }}
-                style={{
-                  background: 'var(--wa-green)',
-                  color: '#111b21',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '6px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                <Sparkles size={14} />
-                <span>Auto-fill Demo Code ({activeVerificationCode || '734921'})</span>
-              </button>
-            </div>
 
             {/* 6 Individual OTP Boxes */}
             <div className="wa-otp-boxes" style={{ marginBottom: 22 }}>
@@ -1097,7 +982,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
                     }}
                     title="Generate a unique 3D/Bitmoji avatar"
                   >
-                    <Sparkles size={13} />
+                    <RefreshCw size={13} />
                     <span>🎲 Roll Bitmoji</span>
                   </button>
                 </div>

@@ -29,7 +29,6 @@ import ChatArea from './components/Chat/ChatArea';
 import CallModal from './components/Call/CallModal';
 import NewGroupModal from './components/Groups/NewGroupModal';
 import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
-import DisguiseModal from './components/Privacy/DisguiseModal';
 
 // Memory cache to prevent duplicate processing of the same incoming message across transports
 const processedIncomingMessageKeys = new Set();
@@ -235,7 +234,6 @@ export default function App() {
   const p2pRef = useRef(null);
   const [partnerOnlineStatus, setPartnerOnlineStatus] = useState('disconnected'); // 'connected' | 'disconnected'
   const [isPartnerModalOpen, setIsPartnerModalOpen] = useState(false);
-  const [isDisguiseOpen, setIsDisguiseOpen] = useState(false);
 
   // Modals state
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
@@ -344,10 +342,6 @@ export default function App() {
         setIsPartnerModalOpen(false);
         return;
       }
-      if (isDisguiseOpen) {
-        setIsDisguiseOpen(false);
-        return;
-      }
       if (callState.isOpen) {
         handleEndCall();
         return;
@@ -367,19 +361,7 @@ export default function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isNewGroupOpen, isPartnerModalOpen, isDisguiseOpen, callState.isOpen]);
-
-  // Stealth Panic Hotkey: Ctrl+Shift+L or Alt+C toggles disguise calculator
-  useEffect(() => {
-    const handleStealthKey = (e) => {
-      if ((e.ctrlKey && e.shiftKey && e.key?.toLowerCase() === 'l') || (e.altKey && e.key?.toLowerCase() === 'c')) {
-        e.preventDefault();
-        setIsDisguiseOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleStealthKey);
-    return () => window.removeEventListener('keydown', handleStealthKey);
-  }, []);
+  }, [isNewGroupOpen, isPartnerModalOpen, callState.isOpen]);
 
   // Apply theme
   useEffect(() => {
@@ -1575,7 +1557,6 @@ export default function App() {
             onUpdateProfile={handleUpdateProfile}
             onAddContact={handleAddContact}
             onStartChatRoom={handleStartChatRoom}
-            onOpenDisguise={() => setIsDisguiseOpen(true)}
             onLogout={handleLogout}
           />
         </div>
@@ -1619,12 +1600,6 @@ export default function App() {
         onConnectPartner={handleConnectPartner}
       />
 
-      {/* Disguise / Secret Calculator Screen */}
-      <DisguiseModal
-        isOpen={isDisguiseOpen}
-        onClose={() => setIsDisguiseOpen(false)}
-        secretPin={settings.disguisePin || '1234'}
-      />
     </div>
   );
 }

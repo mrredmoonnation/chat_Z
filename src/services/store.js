@@ -339,80 +339,7 @@ export const subscribeToBroadcast = (callback) => {
 // Local Account Credentials & Profile Indexing
 const ACCOUNTS_KEY = 'chatz_accounts_v1';
 
-export const DEFAULT_DEMO_ACCOUNTS = {
-  'sonu': {
-    email: 'sonu@gmail.com',
-    username: 'sonu',
-    password: 'password123',
-    profile: {
-      uid: 'user_sonu',
-      id: 'wa_user_sonu',
-      username: 'sonu',
-      name: 'Sonu Kumar',
-      displayName: 'Sonu Kumar',
-      email: 'sonu@gmail.com',
-      avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Sonu&backgroundColor=ffdfbf',
-      photoURL: 'https://api.dicebear.com/7.x/notionists/svg?seed=Sonu&backgroundColor=ffdfbf',
-      about: '📶 Available on WiFi',
-      authMethod: 'password',
-      joinedAt: 1710000000000
-    }
-  },
-  'sonu@gmail.com': {
-    email: 'sonu@gmail.com',
-    username: 'sonu',
-    password: 'password123',
-    profile: {
-      uid: 'user_sonu',
-      id: 'wa_user_sonu',
-      username: 'sonu',
-      name: 'Sonu Kumar',
-      displayName: 'Sonu Kumar',
-      email: 'sonu@gmail.com',
-      avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Sonu&backgroundColor=ffdfbf',
-      photoURL: 'https://api.dicebear.com/7.x/notionists/svg?seed=Sonu&backgroundColor=ffdfbf',
-      about: '📶 Available on WiFi',
-      authMethod: 'password',
-      joinedAt: 1710000000000
-    }
-  },
-  'rahul': {
-    email: 'rahul@gmail.com',
-    username: 'rahul',
-    password: 'password123',
-    profile: {
-      uid: 'user_rahul',
-      id: 'wa_user_rahul',
-      username: 'rahul',
-      name: 'Rahul Sharma',
-      displayName: 'Rahul Sharma',
-      email: 'rahul@gmail.com',
-      avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Liam&backgroundColor=c0aede',
-      photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Liam&backgroundColor=c0aede',
-      about: '💻 Coding mode on',
-      authMethod: 'password',
-      joinedAt: 1710000000000
-    }
-  },
-  'rahul@gmail.com': {
-    email: 'rahul@gmail.com',
-    username: 'rahul',
-    password: 'password123',
-    profile: {
-      uid: 'user_rahul',
-      id: 'wa_user_rahul',
-      username: 'rahul',
-      name: 'Rahul Sharma',
-      displayName: 'Rahul Sharma',
-      email: 'rahul@gmail.com',
-      avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Liam&backgroundColor=c0aede',
-      photoURL: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Liam&backgroundColor=c0aede',
-      about: '💻 Coding mode on',
-      authMethod: 'password',
-      joinedAt: 1710000000000
-    }
-  }
-};
+export const DEFAULT_DEMO_ACCOUNTS = {};
 
 export const getStoredAccounts = () => {
   let stored = {};
@@ -422,7 +349,7 @@ export const getStoredAccounts = () => {
   } catch (e) {
     stored = {};
   }
-  return { ...DEFAULT_DEMO_ACCOUNTS, ...stored };
+  return { ...stored };
 };
 
 export const saveAccountCredentials = (emailOrUsername, password, profile) => {
@@ -486,31 +413,11 @@ export const findAccountByUsernameOrEmail = (identifier) => {
 export const verifyAccountCredentials = (identifier, password) => {
   const account = findAccountByUsernameOrEmail(identifier);
   if (!account) {
-    // If test/demo password is used, instantly provision and log in
-    if (password === '123456' || password === 'password123') {
-      const cleanUsernameStr = cleanUsername(identifier) || `user_${Math.floor(Math.random() * 1000)}`;
-      const cleanEmail = identifier.includes('@') ? identifier.toLowerCase() : `${cleanUsernameStr}@chatz.web`;
-      const autoProfile = {
-        uid: `user_${cleanUsernameStr}`,
-        id: `wa_user_${cleanUsernameStr}`,
-        username: cleanUsernameStr,
-        name: cleanUsernameStr.charAt(0).toUpperCase() + cleanUsernameStr.slice(1),
-        displayName: cleanUsernameStr.charAt(0).toUpperCase() + cleanUsernameStr.slice(1),
-        email: cleanEmail,
-        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsernameStr}`,
-        photoURL: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsernameStr}`,
-        about: 'Hey there! I am using Chatz',
-        authMethod: 'password',
-        joinedAt: Date.now()
-      };
-      saveAccountCredentials(cleanUsernameStr, password, autoProfile);
-      return { success: true, profile: autoProfile, email: cleanEmail };
-    }
     return { success: false, reason: 'user_not_found' };
   }
 
-  // Allow password match OR default test passwords (123456 or password123)
-  const isMatch = account.password === password || password === '123456' || password === 'password123';
+  // Strictly check password match
+  const isMatch = account.password === password;
   if (!isMatch && account.password) {
     return { success: false, reason: 'wrong_password' };
   }
