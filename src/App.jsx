@@ -53,6 +53,21 @@ export default function App() {
     }
   }, [authUser]);
 
+  // Unlock Web Audio context on first user tap/click to allow incoming call ringtone on mobile
+  useEffect(() => {
+    const unlockAudio = () => {
+      sounds.init();
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
   const [firestoreRooms, setFirestoreRooms] = useState([]);
   const [contacts, setContacts] = useState(() => getStoredContacts());
   const [activeContactId, setActiveContactId] = useState(null);
@@ -226,6 +241,7 @@ export default function App() {
   const [callState, setCallState] = useState({
     isOpen: false,
     isIncoming: false,
+    isAccepted: false,
     contact: null,
     isVideo: false
   });
@@ -557,26 +573,35 @@ export default function App() {
         } else if (payload.type === 'P2P_READ') {
           handleReadReceipt(payload.readerUsername || payload.readerId);
         } else if (payload.type === 'START_CALL') {
-          setCallState({
-            isOpen: true,
-            isIncoming: true,
-            contact: payload.contact,
-            isVideo: !!payload.isVideo
-          });
+          handleIncomingCallSignal(payload);
+        } else if (payload.type === 'ACCEPT_CALL') {
+          handleCallAcceptedSignal(payload);
         } else if (payload.type === 'END_CALL') {
-          setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
+          handleCallEndedSignal(payload);
         }
       });
     };
 
-    // Listen on user channels (both username and uid)
-    const userChannels = [
+    // Listen on user channels (both clean username, uid, and aliases)
+    const rawChannels = [
       currentUser.username,
       currentUser.uid,
-      currentUser.email ? currentUser.email.split('@')[0] : null
+      currentUser.id,
+      currentUser.email ? currentUser.email.split('@')[0] : null,
+      currentUser.phone || null
     ].filter(Boolean);
 
-    pollCloudInbox(userChannels, handleInboxMessages);
+    const userChannelsSet = new Set();
+    rawChannels.forEach((ch) => {
+      const clean = cleanUsername(ch);
+      if (clean) {
+        userChannelsSet.add(clean);
+        userChannelsSet.add(`wa_user_${clean}`);
+        userChannelsSet.add(`user_${clean}`);
+      }
+    });
+
+    pollCloudInbox(Array.from(userChannelsSet), handleInboxMessages);
 
     // Poll periodically for cloud user discovery only
     const interval = setInterval(() => {
@@ -689,16 +714,21 @@ export default function App() {
           handleDeliveryReceipt(payload.messageId);
         } else if (payload?.type === 'P2P_READ') {
           handleReadReceipt(payload.readerUsername || payload.readerId || peerId);
+        } else if (payload?.type === 'START_CALL') {
+          handleIncomingCallSignal(payload);
+        } else if (payload?.type === 'ACCEPT_CALL') {
+          handleCallAcceptedSignal(payload);
+        } else if (payload?.type === 'END_CALL') {
+          handleCallEndedSignal(payload);
         }
       },
       onIncomingCall: (mediaCall) => {
-        const partnerContact = contacts.find((c) => c.isPartner) || contacts[0] || {
+        const callerProfile = mediaCall.metadata?.callerProfile;
+        const partnerContact = callerProfile || contacts.find((c) => c.isPartner) || contacts[0] || {
           name: 'Partner',
           avatar: AVATAR_PRESETS[0]
         };
-        setCallState({
-          isOpen: true,
-          isIncoming: true,
+        handleIncomingCallSignal({
           contact: partnerContact,
           isVideo: mediaCall.metadata?.isVideo ?? true
         });
@@ -798,14 +828,11 @@ export default function App() {
           prev.map((c) => (c.id === contactId ? { ...c, isTyping } : c))
         );
       } else if (data.type === 'START_CALL') {
-        setCallState({
-          isOpen: true,
-          isIncoming: true,
-          contact: data.payload.contact,
-          isVideo: data.payload.isVideo
-        });
+        handleIncomingCallSignal(data.payload);
+      } else if (data.type === 'ACCEPT_CALL') {
+        handleCallAcceptedSignal(data.payload);
       } else if (data.type === 'END_CALL') {
-        setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
+        handleCallEndedSignal(data.payload);
       } else if (data.type === 'STORIES_UPDATED') {
         setStories(data.payload);
       }
@@ -1182,46 +1209,183 @@ export default function App() {
     setIsNewGroupOpen(false);
   };
 
-  // Start Call (Local + Internet Cloud Signal)
+  // Resolve all target identifier aliases for a contact to guarantee message/call delivery
+  const resolveTargetChannels = (contact) => {
+    const targets = new Set();
+    if (!contact) return [];
+
+    const addTarget = (raw) => {
+      if (!raw || typeof raw !== 'string') return;
+      const clean = cleanUsername(raw);
+      if (clean && clean !== 'user' && clean !== cleanUsername(currentUser?.username)) {
+        targets.add(clean);
+      }
+    };
+
+    // 1. Direct username
+    addTarget(contact.username);
+
+    // 2. Direct name if it's a valid handle
+    if (contact.name && isValidUsernameFormat(contact.name)) {
+      addTarget(contact.name);
+    }
+
+    // 3. otherUid or uid
+    addTarget(contact.otherUid);
+    addTarget(contact.uid);
+
+    // 4. Cleaned id (without wa_user_ or user_)
+    if (contact.id) {
+      if (contact.id.startsWith('wa_user_')) {
+        addTarget(contact.id.replace('wa_user_', ''));
+      } else if (contact.id.startsWith('user_')) {
+        addTarget(contact.id.replace('user_', ''));
+      } else if (!contact.id.startsWith('room_')) {
+        addTarget(contact.id);
+      }
+    }
+
+    // 5. phone & email
+    addTarget(contact.phone);
+    if (contact.email) {
+      addTarget(contact.email.split('@')[0]);
+    }
+
+    // 6. roomId (e.g. room_user_sonu_user_rahul or room_sonu_rahul)
+    const roomStr = contact.roomId || (contact.id?.startsWith('room_') ? contact.id : '');
+    if (roomStr && roomStr.startsWith('room_')) {
+      const parts = roomStr.replace('room_', '').split('_');
+      parts.forEach((p) => {
+        if (p && p !== 'user' && p !== cleanUsername(currentUser?.username) && p !== cleanUsername(currentUser?.uid)) {
+          addTarget(p);
+        }
+      });
+    }
+
+    // 7. participants array if present
+    if (Array.isArray(contact.participants)) {
+      contact.participants.forEach((p) => {
+        addTarget(p);
+      });
+    }
+
+    return Array.from(targets);
+  };
+
+  // Incoming Call Signals Handlers
+  const handleIncomingCallSignal = (payload) => {
+    if (!payload?.contact) return;
+    console.log('Incoming call signal received from:', payload.contact);
+    sounds.init();
+    sounds.startIncomingRingtone();
+    if (navigator.vibrate) {
+      try { navigator.vibrate([400, 200, 400, 200, 800]); } catch (e) {}
+    }
+    setCallState({
+      isOpen: true,
+      isIncoming: true,
+      isAccepted: false,
+      contact: payload.contact,
+      isVideo: !!payload.isVideo
+    });
+  };
+
+  const handleCallAcceptedSignal = () => {
+    console.log('Call was accepted by recipient!');
+    sounds.stopRingtone();
+    setCallState((prev) => ({
+      ...prev,
+      isIncoming: false,
+      isAccepted: true
+    }));
+  };
+
+  const handleCallEndedSignal = () => {
+    console.log('Call was ended by other party');
+    sounds.stopRingtone();
+    setCallState({ isOpen: false, isIncoming: false, isAccepted: false, contact: null, isVideo: false });
+    p2pRef.current?.endCall();
+  };
+
+  // Start Call (Multi-channel Internet Cloud Signal + P2P)
   const handleStartCall = (contact, isVideo) => {
+    if (!contact) return;
     setCallState({
       isOpen: true,
       isIncoming: false,
+      isAccepted: false,
       contact,
       isVideo
     });
     broadcastChange('START_CALL', { contact: currentUser, isVideo });
 
-    // Send instant call notification to partner across the internet
-    const targetIdentifier = contact.username || 
-      (contact.id?.startsWith('wa_user_') ? contact.id.replace('wa_user_', '') : contact.id);
-    if (targetIdentifier) {
-      sendCloudInboxMessage(targetIdentifier, {
-        type: 'START_CALL',
-        contact: {
-          id: currentUser.id || `wa_user_${currentUser.username}`,
-          username: currentUser.username,
-          name: currentUser.name || currentUser.displayName || currentUser.username,
-          avatar: currentUser.avatar || currentUser.photoURL
-        },
-        isVideo
-      });
+    // Send instant call notification to partner across all their aliases
+    const targets = resolveTargetChannels(contact);
+    console.log('Sending call notification to channels:', targets);
+
+    const callPayload = {
+      type: 'START_CALL',
+      contact: {
+        id: currentUser.id || `wa_user_${currentUser.username}`,
+        username: currentUser.username,
+        name: currentUser.name || currentUser.displayName || currentUser.username,
+        avatar: currentUser.avatar || currentUser.photoURL,
+        phone: currentUser.phone || ''
+      },
+      isVideo
+    };
+
+    targets.forEach((target) => {
+      sendCloudInboxMessage(target, callPayload);
+    });
+
+    // Also send via direct PeerJS DataConnection
+    const peerTarget = targets[0] || contact.username || contact.id;
+    if (peerTarget) {
+      p2pRef.current?.sendData(callPayload, `wa_user_${cleanUsername(peerTarget)}`);
+    }
+  };
+
+  const handleAcceptCall = () => {
+    sounds.stopRingtone();
+    setCallState((prev) => ({ ...prev, isIncoming: false, isAccepted: true }));
+
+    const caller = callState.contact;
+    const targets = resolveTargetChannels(caller);
+
+    const acceptPayload = {
+      type: 'ACCEPT_CALL',
+      responder: currentUser
+    };
+
+    targets.forEach((target) => {
+      sendCloudInboxMessage(target, acceptPayload);
+    });
+
+    const peerTarget = targets[0] || caller?.username || caller?.id;
+    if (peerTarget) {
+      p2pRef.current?.sendData(acceptPayload, `wa_user_${cleanUsername(peerTarget)}`);
     }
   };
 
   const handleEndCall = () => {
+    sounds.stopRingtone();
     const target = callState.contact;
-    setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
+    setCallState({ isOpen: false, isIncoming: false, isAccepted: false, contact: null, isVideo: false });
     broadcastChange('END_CALL', {});
     p2pRef.current?.endCall();
 
-    // Signal call end to partner across the internet
-    const targetIdentifier = target?.username || 
-      (target?.id?.startsWith('wa_user_') ? target.id.replace('wa_user_', '') : target?.id);
-    if (targetIdentifier) {
-      sendCloudInboxMessage(targetIdentifier, {
-        type: 'END_CALL'
+    if (target) {
+      const targets = resolveTargetChannels(target);
+      const endPayload = { type: 'END_CALL' };
+      targets.forEach((ch) => {
+        sendCloudInboxMessage(ch, endPayload);
       });
+
+      const peerTarget = targets[0] || target.username || target.id;
+      if (peerTarget) {
+        p2pRef.current?.sendData(endPayload, `wa_user_${cleanUsername(peerTarget)}`);
+      }
     }
   };
 
@@ -1280,7 +1444,8 @@ export default function App() {
       <CallModal
         callState={callState}
         onEndCall={handleEndCall}
-        onAcceptCall={() => {}}
+        onAcceptCall={handleAcceptCall}
+        p2pService={p2pRef.current}
       />
 
       {/* Create New Group Modal */}

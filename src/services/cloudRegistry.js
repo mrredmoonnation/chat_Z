@@ -45,20 +45,26 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
 
   try {
     if (mqttClient) {
-      try { mqttClient.disconnect(); } catch (e) {}
+      try {
+        if (isConnected && mqttClient.isConnected && mqttClient.isConnected()) {
+          mqttClient.disconnect();
+        }
+      } catch (e) {}
     }
 
     mqttClient = new Paho.Client(BROKER_HOST, BROKER_PORT, BROKER_PATH, clientId);
 
     mqttClient.onConnectionLost = (responseObject) => {
       isConnected = false;
-      console.warn('Realtime Cloud disconnected:', responseObject.errorMessage);
-      // Auto-reconnect after 3 seconds
+      if (responseObject.errorCode !== 0) {
+        console.warn('Realtime Cloud disconnected:', responseObject.errorMessage);
+      }
+      // Auto-reconnect after 2 seconds
       setTimeout(() => {
         if (currentSubscribedUsers.size > 0) {
           initRealtimeCloud(Array.from(currentSubscribedUsers));
         }
-      }, 3000);
+      }, 2000);
     };
 
     mqttClient.onMessageArrived = (message) => {

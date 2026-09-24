@@ -297,25 +297,73 @@ export class OnlineP2PService {
     return true;
   }
 
-  // Initiate an audio/video call to partner across the internet
-  callPartner(stream, isVideo = true) {
-    if (!this.peer || !this.targetPeerId) return null;
+  // Initiate an audio/video call to a specific user across the internet
+  callUser(targetIdentifier, stream, isVideo = true, onRemoteStream = null) {
+    if (!this.peer || !targetIdentifier || !stream) {
+      console.warn('Cannot place call: missing peer, targetIdentifier, or local media stream');
+      return null;
+    }
 
-    const mediaCall = this.peer.call(this.targetPeerId, stream, {
-      metadata: { isVideo }
-    });
-    this.activeMediaCall = mediaCall;
-    return mediaCall;
+    const cleanId = sanitizePeerIdentifier(targetIdentifier);
+    const peerId = `wa_user_${cleanId}`;
+    this.targetPeerId = peerId;
+
+    try {
+      console.log(`Initiating WebRTC call to ${peerId} (video: ${isVideo})`);
+      const mediaCall = this.peer.call(peerId, stream, {
+        metadata: { isVideo, callerProfile: this.myProfile }
+      });
+
+      if (mediaCall) {
+        this.activeMediaCall = mediaCall;
+        if (onRemoteStream) {
+          mediaCall.on('stream', (remoteStream) => {
+            console.log('Received remote media stream from', peerId);
+            onRemoteStream(remoteStream);
+          });
+        }
+        mediaCall.on('close', () => {
+          this.activeMediaCall = null;
+        });
+        mediaCall.on('error', (err) => {
+          console.warn('MediaCall error:', err);
+        });
+      }
+      return mediaCall;
+    } catch (err) {
+      console.warn('Failed to call user via PeerJS:', err);
+      return null;
+    }
+  }
+
+  // Initiate an audio/video call to partner across the internet
+  callPartner(stream, isVideo = true, onRemoteStream = null) {
+    if (!this.targetPeerId) return null;
+    return this.callUser(this.targetPeerId, stream, isVideo, onRemoteStream);
   }
 
   // Answer an incoming audio/video call
   answerCall(localStream, onRemoteStream) {
-    if (!this.activeMediaCall) return;
+    if (!this.activeMediaCall) {
+      console.warn('answerCall notice: No active mediaCall to answer');
+      return;
+    }
 
-    this.activeMediaCall.answer(localStream);
-    this.activeMediaCall.on('stream', (remoteStream) => {
-      onRemoteStream && onRemoteStream(remoteStream);
-    });
+    try {
+      this.activeMediaCall.answer(localStream);
+      this.activeMediaCall.on('stream', (remoteStream) => {
+        console.log('Remote stream received after answering call');
+        onRemoteStream && onRemoteStream(remoteStream);
+      });
+      this.activeMediaCall.on('close', () => {
+        this.activeMediaCall = null;
+      });
+      this.activeMediaCall.on('error', (err) => {
+        console.warn('Answered mediaCall error:', err);
+      });
+    } catch (err) {
+      console.error('Error answering call:', err);
+    }
   }
 
   // End active media call

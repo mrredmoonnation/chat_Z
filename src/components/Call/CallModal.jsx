@@ -4,9 +4,10 @@ import { sounds } from '../../services/audioEffects';
 import { WebRTCService } from '../../services/webrtc';
 
 export default function CallModal({
-  callState, // { isOpen, isIncoming, contact, isVideo }
+  callState, // { isOpen, isIncoming, isAccepted, contact, isVideo }
   onEndCall,
-  onAcceptCall
+  onAcceptCall,
+  p2pService
 }) {
   const [status, setStatus] = useState('connecting'); // 'incoming', 'ringing', 'connected'
   const [duration, setDuration] = useState(0);
@@ -18,6 +19,7 @@ export default function CallModal({
   const webrtcRef = useRef(null);
   const timerIntervalRef = useRef(null);
 
+  // Initialize and handle call state transitions
   useEffect(() => {
     if (!callState?.isOpen) {
       sounds.stopRingtone();
@@ -25,60 +27,95 @@ export default function CallModal({
       return;
     }
 
-    // Set initial status
+    // 1. Incoming Call Screen
     if (callState.isIncoming) {
       setStatus('incoming');
       sounds.startIncomingRingtone();
-    } else {
-      setStatus('ringing');
-      sounds.startOutgoingTone();
-      // Outgoing auto-connect demo after 3 seconds if receiver doesn't answer manually
-      const connectTimeout = setTimeout(() => {
-        handleConnect();
-      }, 3200);
-      return () => clearTimeout(connectTimeout);
+      return;
     }
+
+    // 2. Outgoing Call Screen (Ringing until receiver answers)
+    setStatus('ringing');
+    sounds.startOutgoingTone();
+
+    // Start local camera/mic preview for the caller
+    startLocalPreview();
+
+    // 45 seconds timeout if receiver doesn't answer
+    const ringTimeout = setTimeout(() => {
+      if (status === 'ringing') {
+        handleEnd();
+      }
+    }, 45000);
+
+    return () => clearTimeout(ringTimeout);
   }, [callState?.isOpen, callState?.isIncoming]);
 
-  // Connect call and start camera/mic
-  const handleConnect = async () => {
-    sounds.stopRingtone();
-    setStatus('connected');
+  // When receiver answers (isAccepted becomes true) or when caller gets ACCEPT_CALL
+  useEffect(() => {
+    if (callState?.isOpen && callState?.isAccepted && status !== 'connected') {
+      sounds.stopRingtone();
+      setStatus('connected');
+      startConnectedCall();
+    }
+  }, [callState?.isOpen, callState?.isAccepted]);
 
-    // Initialize WebRTC
-    const rtc = new WebRTCService(
-      (remoteStream) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
+  // Acquire local camera/mic stream
+  const startLocalPreview = async () => {
+    if (!webrtcRef.current) {
+      webrtcRef.current = new WebRTCService(
+        (remoteStream) => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+          }
+        },
+        (connState) => {
+          console.log('Peer connection state:', connState);
         }
-      },
-      (connState) => {
-        console.log('Peer connection state:', connState);
-      }
-    );
-    webrtcRef.current = rtc;
+      );
+    }
 
-    // Get media
-    const { stream } = await rtc.getMediaStream(callState.isVideo);
+    const { stream } = await webrtcRef.current.getMediaStream(callState.isVideo);
     if (localVideoRef.current && stream) {
       localVideoRef.current.srcObject = stream;
     }
+    return stream;
+  };
 
-    // Also simulate remote video stream for demonstration if peer connection isn't on real remote machine
-    if (remoteVideoRef.current && stream && callState.isVideo) {
+  // Start connected call once accepted
+  const startConnectedCall = async () => {
+    sounds.stopRingtone();
+    setStatus('connected');
+
+    const stream = await startLocalPreview();
+
+    // If PeerJS mediaCall is active on receiver side, answer it
+    if (p2pService?.activeMediaCall && stream) {
+      p2pService.answerCall(stream, (remoteStream) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+        }
+      });
+    }
+
+    // Fallback display if direct remote stream is not yet established
+    if (remoteVideoRef.current && !remoteVideoRef.current.srcObject && stream && callState.isVideo) {
       remoteVideoRef.current.srcObject = stream;
     }
 
     // Start duration timer
     setDuration(0);
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     timerIntervalRef.current = setInterval(() => {
       setDuration((prev) => prev + 1);
     }, 1000);
   };
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
+    sounds.stopRingtone();
+    setStatus('connected');
     onAcceptCall && onAcceptCall();
-    handleConnect();
+    await startConnectedCall();
   };
 
   const handleEnd = () => {
