@@ -4,7 +4,7 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck, 
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  Calculator, RotateCcw
+  RotateCcw
 } from 'lucide-react';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
@@ -462,16 +462,7 @@ export default function Sidebar({
             <CircleDashed size={20} />
           </button>
 
-          {/* Stealth Disguise Lock Button */}
-          <button
-            id="stealthLockBtn"
-            type="button"
-            className="wa-icon-btn wa-stealth-trigger"
-            onClick={onOpenDisguise}
-            title="Calculator Disguise Lock (Ctrl+Shift+L)"
-          >
-            <Calculator size={18} />
-          </button>
+
 
           {/* Reload / Refresh Button */}
           <button
