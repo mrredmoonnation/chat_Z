@@ -556,6 +556,15 @@ export default function App() {
           handleDeliveryReceipt(payload.messageId);
         } else if (payload.type === 'P2P_READ') {
           handleReadReceipt(payload.readerUsername || payload.readerId);
+        } else if (payload.type === 'START_CALL') {
+          setCallState({
+            isOpen: true,
+            isIncoming: true,
+            contact: payload.contact,
+            isVideo: !!payload.isVideo
+          });
+        } else if (payload.type === 'END_CALL') {
+          setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
         }
       });
     };
@@ -1173,7 +1182,7 @@ export default function App() {
     setIsNewGroupOpen(false);
   };
 
-  // Start Call
+  // Start Call (Local + Internet Cloud Signal)
   const handleStartCall = (contact, isVideo) => {
     setCallState({
       isOpen: true,
@@ -1182,12 +1191,38 @@ export default function App() {
       isVideo
     });
     broadcastChange('START_CALL', { contact: currentUser, isVideo });
+
+    // Send instant call notification to partner across the internet
+    const targetIdentifier = contact.username || 
+      (contact.id?.startsWith('wa_user_') ? contact.id.replace('wa_user_', '') : contact.id);
+    if (targetIdentifier) {
+      sendCloudInboxMessage(targetIdentifier, {
+        type: 'START_CALL',
+        contact: {
+          id: currentUser.id || `wa_user_${currentUser.username}`,
+          username: currentUser.username,
+          name: currentUser.name || currentUser.displayName || currentUser.username,
+          avatar: currentUser.avatar || currentUser.photoURL
+        },
+        isVideo
+      });
+    }
   };
 
   const handleEndCall = () => {
+    const target = callState.contact;
     setCallState({ isOpen: false, isIncoming: false, contact: null, isVideo: false });
     broadcastChange('END_CALL', {});
     p2pRef.current?.endCall();
+
+    // Signal call end to partner across the internet
+    const targetIdentifier = target?.username || 
+      (target?.id?.startsWith('wa_user_') ? target.id.replace('wa_user_', '') : target?.id);
+    if (targetIdentifier) {
+      sendCloudInboxMessage(targetIdentifier, {
+        type: 'END_CALL'
+      });
+    }
   };
 
   // If user is not logged in, render WhatsApp Phone Onboarding
