@@ -4,7 +4,7 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck, 
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  Calculator
+  Calculator, RotateCcw
 } from 'lucide-react';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
@@ -54,6 +54,7 @@ export default function Sidebar({
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [editName, setEditName] = useState(currentUser?.name || '');
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
@@ -470,6 +471,27 @@ export default function Sidebar({
             title="Calculator Disguise Lock (Ctrl+Shift+L)"
           >
             <Calculator size={18} />
+          </button>
+
+          {/* Reload / Refresh Button */}
+          <button
+            id="reloadPageBtn"
+            type="button"
+            className="wa-icon-btn"
+            title="Reload App"
+            onClick={() => {
+              setIsReloading(true);
+              setTimeout(() => window.location.reload(), 400);
+            }}
+            style={{ color: 'var(--wa-text-secondary)' }}
+          >
+            <RotateCcw
+              size={18}
+              style={{
+                transition: 'transform 0.4s ease',
+                transform: isReloading ? 'rotate(360deg)' : 'rotate(0deg)'
+              }}
+            />
           </button>
 
           {/* 3 Dots Menu */}
