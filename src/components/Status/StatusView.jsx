@@ -138,7 +138,7 @@ export default function StatusView({
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImage(file, 1080, 1080, 0.75);
+        const compressed = await compressImage(file, 640, 640, 0.6);
         setNewImageUrl(compressed);
       } catch (err) {
         console.error('Failed to compress status image:', err);

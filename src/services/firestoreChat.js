@@ -286,6 +286,7 @@ export const sendFirestoreMessage = async (roomId, currentUser, messagePayload) 
     fileName: messagePayload.fileName || null,
     fileSize: messagePayload.fileSize || null,
     caption: messagePayload.caption || null,
+    clientMsgId: messagePayload.id || messagePayload.clientMsgId || null,
     status: 'sent',
     timestamp: serverTimestamp()
   };

@@ -30,6 +30,9 @@ import NewGroupModal from './components/Groups/NewGroupModal';
 import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
 import DisguiseModal from './components/Privacy/DisguiseModal';
 
+// Memory cache to prevent duplicate processing of the same incoming message across transports
+const processedIncomingMessageKeys = new Set();
+
 export default function App() {
   const { currentUser: authUser, logout: authLogout } = useAuth();
   const [currentUser, setCurrentUser] = useState(() => {
@@ -137,7 +140,7 @@ export default function App() {
         lastSeen: 'Online',
         lastMessage: r.lastMessage || existing?.lastMessage || '',
         lastMessageTimestamp: r.lastMessageTimestamp || existing?.lastMessageTimestamp,
-        unreadCount: (activeContactId && matchesContact(r, activeContactId)) ? 0 : (existing?.unreadCount || 0),
+        unreadCount: (activeContactId && (matchesContact(r, activeContactId) || (existing && matchesContact(existing, activeContactId)))) ? 0 : (existing?.unreadCount || 0),
         messages: existing?.messages || []
       };
     });
@@ -147,7 +150,15 @@ export default function App() {
       .filter((c) => !roomContacts.some((rc) => matchesContact(c, rc)))
       .map((c) => (matchesContact(c, activeContactId) ? { ...c, unreadCount: 0 } : c));
 
-    return [...roomContacts, ...nonRoomContacts];
+    // Deduplicate nonRoomContacts among themselves to prevent duplicate contact cards
+    const uniqueNonRoom = [];
+    for (const c of nonRoomContacts) {
+      if (!uniqueNonRoom.some((u) => matchesContact(u, c))) {
+        uniqueNonRoom.push(c);
+      }
+    }
+
+    return [...roomContacts, ...uniqueNonRoom];
   }, [firestoreRooms, contacts, currentUser?.uid, activeContactId]);
 
   // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
@@ -173,9 +184,10 @@ export default function App() {
               if (matchesContact(c, activeContactId) || matchesContact(c, roomId)) {
                 // Merge firestore messages + preserve any optimistic pending sent messages in-flight
                 const fsIds = new Set(firestoreMessages.map((m) => m.id));
+                const fsClientIds = new Set(firestoreMessages.map((m) => m.clientMsgId).filter(Boolean));
                 const pendingLocal = (c.messages || []).filter(
-                  (m) => !fsIds.has(m.id) && m.status === 'sent' && (Date.now() - (m.timestamp || 0) < 15000) &&
-                         !firestoreMessages.some((fm) => fm.text && fm.text === m.text)
+                  (m) => !fsIds.has(m.id) && !fsClientIds.has(m.id) && m.status === 'sent' && (Date.now() - (m.timestamp || 0) < 15000) &&
+                         !firestoreMessages.some((fm) => (fm.text && fm.text === m.text) || (fm.caption && fm.caption === m.caption))
                 );
                 const all = [...firestoreMessages, ...pendingLocal];
                 all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
@@ -232,7 +244,7 @@ export default function App() {
     // Clear unread count for this contact immediately and mark incoming messages as read
     setContacts((prev) => {
       const updated = prev.map((c) => {
-        if (matchesContact(c, id) || (targetRoomId && matchesContact(c, targetRoomId))) {
+        if (matchesContact(c, id) || (targetRoomId && matchesContact(c, targetRoomId)) || (targetContact && matchesContact(c, targetContact))) {
           return {
             ...c,
             unreadCount: 0,
@@ -359,6 +371,20 @@ export default function App() {
   const handleIncomingChatMessage = (payload, sourcePeerId = null) => {
     if (!payload?.message) return;
 
+    // Fast idempotency deduplication check across real-time transports
+    const msgId = payload.message.id;
+    const dedupeKey = msgId || `${payload.senderUsername || payload.senderId}_${payload.message.text || payload.message.type}_${payload.message.timestamp || ''}`;
+    if (dedupeKey) {
+      if (processedIncomingMessageKeys.has(dedupeKey)) {
+        return; // Already processed this message!
+      }
+      processedIncomingMessageKeys.add(dedupeKey);
+      if (processedIncomingMessageKeys.size > 2000) {
+        const oldest = processedIncomingMessageKeys.values().next().value;
+        processedIncomingMessageKeys.delete(oldest);
+      }
+    }
+
     const senderUsername = payload.senderUsername;
     const senderPeerId = sourcePeerId || payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
     const incomingMsg = {
@@ -379,14 +405,17 @@ export default function App() {
     setContacts((prev) => {
       const partner = prev.find((c) => 
         matchesContact(c, senderPeerId) || 
-        (senderUsername && matchesContact(c, senderUsername))
+        (senderUsername && matchesContact(c, senderUsername)) ||
+        (payload.senderName && matchesContact(c, payload.senderName))
       );
 
+      const activeContact = prev.find((c) => matchesContact(c, activeContactId));
       const isCurrentlyActive = Boolean(
-        activeContactId && (
-          matchesContact({ id: activeContactId }, senderPeerId) ||
-          (senderUsername && matchesContact({ id: activeContactId }, senderUsername)) ||
-          (partner && matchesContact(partner, activeContactId))
+        activeContact && (
+          matchesContact(activeContact, senderPeerId) ||
+          (senderUsername && matchesContact(activeContact, senderUsername)) ||
+          (payload.senderName && matchesContact(activeContact, payload.senderName)) ||
+          (partner && matchesContact(partner, activeContact))
         )
       );
 
@@ -401,15 +430,15 @@ export default function App() {
       if (partner) {
         // Prevent duplicate messages by id or text+time
         const isDuplicate = partner.messages?.some(
-          (m) => m.id === incomingMsg.id || 
-                 (m.text && m.text === incomingMsg.text && Math.abs((m.timestamp || 0) - (incomingMsg.timestamp || 0)) < 4000)
+          (m) => (m.id && m.id === incomingMsg.id) || 
+                 (m.text && incomingMsg.text && m.text === incomingMsg.text && Math.abs((m.timestamp || 0) - (incomingMsg.timestamp || 0)) < 5000)
         );
         if (isDuplicate) {
           return prev;
         }
 
         const updated = prev.map((c) =>
-          c.id === partner.id
+          matchesContact(c, partner)
             ? {
                 ...c,
                 username: c.username || senderUsername,
@@ -540,11 +569,10 @@ export default function App() {
 
     pollCloudInbox(userChannels, handleInboxMessages);
 
-    // Poll every 6 seconds for discovery
+    // Poll periodically for cloud user discovery only
     const interval = setInterval(() => {
       fetchCloudUsers();
-      pollCloudInbox(userChannels, handleInboxMessages);
-    }, 6000);
+    }, 8000);
 
     return () => clearInterval(interval);
   }, [currentUser?.username, currentUser?.uid]);
@@ -917,7 +945,7 @@ export default function App() {
 
     // 4. Send to Firestore in the background if active chat has a room (WITHOUT early returning!)
     if (roomId && currentUser?.uid) {
-      sendFirestoreMessage(roomId, currentUser, msgData)
+      sendFirestoreMessage(roomId, currentUser, { ...msgData, id: messageId, clientMsgId: messageId })
         .then((savedMsg) => {
           if (savedMsg?.id) {
             setContacts((prev) => {
@@ -925,7 +953,7 @@ export default function App() {
                 if (matchesContact(c, activeContactId) || matchesContact(c, roomId)) {
                   return {
                     ...c,
-                    messages: (c.messages || []).map((m) => (m.id === messageId ? { ...m, id: savedMsg.id } : m))
+                    messages: (c.messages || []).map((m) => (m.id === messageId ? { ...m, id: savedMsg.id, clientMsgId: messageId } : m))
                   };
                 }
                 return c;
@@ -954,12 +982,10 @@ export default function App() {
       senderAvatar: currentUser?.photoURL || currentUser?.avatar || null
     };
 
-    // 6. Send over Real-Time MQTT Cloud Relay (works over 4G/5G mobile data, WiFi, hotspots!)
-    if (targetUsername) {
-      sendCloudInboxMessage(targetUsername, wirePayload);
-    }
-    if (targetContact?.otherUid && targetContact.otherUid !== targetUsername) {
-      sendCloudInboxMessage(targetContact.otherUid, wirePayload);
+    // 6. Send over Real-Time MQTT Cloud Relay (ONLY ONCE to primary target to prevent duplicates!)
+    const primaryTarget = targetUsername || targetContact?.otherUid;
+    if (primaryTarget) {
+      sendCloudInboxMessage(primaryTarget, wirePayload);
     }
 
     // 7. Send over WebRTC P2P (direct peer connection)

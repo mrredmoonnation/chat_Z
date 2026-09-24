@@ -80,7 +80,7 @@ export default function ChatInput({
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressedUrl = await compressImage(file, 1200, 1200, 0.75);
+        const compressedUrl = await compressImage(file, 640, 640, 0.6);
         onSendMessage({
           type: 'image',
           url: compressedUrl,

@@ -26,18 +26,20 @@ export const matchesContact = (contact, identifierOrObj) => {
   if (typeof identifierOrObj === 'string') {
     const raw = identifierOrObj.trim();
     if (!raw) return false;
-    const clean = raw.toLowerCase().replace(/^wa_user_|^user_/, '');
+    const clean = cleanUsername(raw);
 
     if (contact.id === raw || contact.roomId === raw) return true;
     if (contact.uid === raw || contact.otherUid === raw) return true;
-    if (contact.username && contact.username.toLowerCase() === clean) return true;
+    if (contact.username && cleanUsername(contact.username) === clean) return true;
     if (contact.phone && contact.phone === raw) return true;
+    if (contact.name && cleanUsername(contact.name) === clean) return true;
+    if (contact.name && contact.name.toLowerCase() === raw.toLowerCase()) return true;
 
-    const contactClean = String(contact.id || '').toLowerCase().replace(/^wa_user_|^user_/, '');
+    const contactClean = cleanUsername(contact.id || '');
     if (contactClean && contactClean === clean) return true;
 
     const contactRoomClean = String(contact.roomId || '').toLowerCase();
-    if (contactRoomClean && contactRoomClean.includes(clean)) return true;
+    if (contactRoomClean && clean && contactRoomClean.includes(clean)) return true;
 
     return false;
   }
@@ -47,16 +49,25 @@ export const matchesContact = (contact, identifierOrObj) => {
   const targetId = obj.id || obj.roomId || obj.senderId || obj.peerId;
   const targetUsername = cleanUsername(obj.username || obj.senderUsername || '');
   const targetUid = obj.uid || obj.otherUid;
+  const targetName = obj.name || obj.displayName || obj.roomName;
 
   if (targetId && (contact.id === targetId || contact.roomId === targetId)) return true;
   if (targetUid && (contact.uid === targetUid || contact.otherUid === targetUid)) return true;
   if (targetUsername && contact.username && cleanUsername(contact.username) === targetUsername) return true;
 
+  if (targetName && contact.name) {
+    if (cleanUsername(contact.name) === cleanUsername(targetName)) return true;
+    if (contact.name.toLowerCase() === targetName.toLowerCase()) return true;
+  }
+  if (targetName && contact.username && cleanUsername(contact.username) === cleanUsername(targetName)) return true;
+  if (targetUsername && contact.name && cleanUsername(contact.name) === targetUsername) return true;
+
   if (targetId) {
-    const cleanTarget = String(targetId).toLowerCase().replace(/^wa_user_|^user_/, '');
-    const cleanContactId = String(contact.id || '').toLowerCase().replace(/^wa_user_|^user_/, '');
+    const cleanTarget = cleanUsername(targetId);
+    const cleanContactId = cleanUsername(contact.id || '');
     if (cleanTarget && cleanContactId && cleanTarget === cleanContactId) return true;
     if (contact.username && cleanUsername(contact.username) === cleanTarget) return true;
+    if (contact.name && cleanUsername(contact.name) === cleanTarget) return true;
   }
 
   if (obj.roomId && contact.roomId && obj.roomId === contact.roomId) return true;

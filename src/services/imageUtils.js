@@ -2,14 +2,14 @@
 // Downsamples high-resolution mobile/desktop photos to lightweight, crystal-clear web images (~40KB - 120KB)
 // Prevents browser localStorage quota crashes, Firestore 1MB limits, and WebRTC data channel packet drops.
 
-export const compressImage = (fileOrBlob, maxWidth = 1200, maxHeight = 1200, quality = 0.75) => {
+export const compressImage = (fileOrBlob, maxWidth = 640, maxHeight = 640, quality = 0.6) => {
   return new Promise((resolve, reject) => {
     if (!fileOrBlob) {
       return reject(new Error('No file provided for compression'));
     }
 
     // If already SVG or tiny file, read directly
-    if (fileOrBlob.type === 'image/svg+xml' || (fileOrBlob.size && fileOrBlob.size < 30 * 1024)) {
+    if (fileOrBlob.type === 'image/svg+xml' || (fileOrBlob.size && fileOrBlob.size < 25 * 1024)) {
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target.result);
       reader.onerror = reject;
@@ -54,14 +54,20 @@ export const compressImage = (fileOrBlob, maxWidth = 1200, maxHeight = 1200, qua
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
 
-          // Optional white background for transparent PNGs converted to JPEG
+          // White background for transparent PNGs converted to JPEG
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, width, height);
 
           ctx.drawImage(img, 0, 0, width, height);
 
           // Export compressed JPEG
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          let compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+
+          // If still > 50KB base64, re-encode with lower quality to stay within 64KB WebRTC & MQTT limit
+          if (compressedDataUrl.length > 50000) {
+            compressedDataUrl = canvas.toDataURL('image/jpeg', 0.45);
+          }
+
           resolve(compressedDataUrl);
         } catch (err) {
           console.warn('Canvas compression fallback:', err);

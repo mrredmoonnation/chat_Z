@@ -17,6 +17,7 @@ let pendingPublishQueue = [];
 // Initialize or reconnect MQTT client
 export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
   if (onMessageReceived) {
+    messageHandlers.clear();
     messageHandlers.add(onMessageReceived);
   }
 

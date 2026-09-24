@@ -70,18 +70,43 @@ export default function ChatArea({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Deduplicate and filter active contact messages for clean, single-bubble rendering
+  const renderedMessages = React.useMemo(() => {
+    if (!activeContact?.messages || !Array.isArray(activeContact.messages)) return [];
+    const seenIds = new Set();
+    const seenSignatures = new Set();
+    const unique = [];
+
+    for (const msg of activeContact.messages) {
+      if (!msg) continue;
+      const msgId = msg.id || msg.clientMsgId;
+      if (msgId && seenIds.has(msgId)) continue;
+
+      // Group nearby identical messages (sent within 4 seconds) to eliminate duplicate bubbles
+      const body = msg.text || msg.caption || msg.url || msg.fileUrl || msg.fileName || '';
+      const timeBucket = Math.floor((msg.timestamp || 0) / 4000);
+      const sig = `${msg.senderId || msg.senderUsername || ''}_${body}_${timeBucket}`;
+      if (body && seenSignatures.has(sig)) continue;
+
+      if (msgId) seenIds.add(msgId);
+      if (body) seenSignatures.add(sig);
+      unique.push(msg);
+    }
+    return unique;
+  }, [activeContact?.messages]);
+
   // Compute matching message IDs in current chat
   const matchingMsgIds = React.useMemo(() => {
     const q = inChatSearchQuery.trim().toLowerCase();
-    if (!q || !activeContact?.messages) return [];
-    return activeContact.messages
+    if (!q || !renderedMessages.length) return [];
+    return renderedMessages
       .filter(
         (m) =>
           (m.text && m.text.toLowerCase().includes(q)) ||
           (m.fileName && m.fileName.toLowerCase().includes(q))
       )
       .map((m) => m.id);
-  }, [inChatSearchQuery, activeContact?.messages]);
+  }, [inChatSearchQuery, renderedMessages]);
 
   // Reset match index when query changes
   useEffect(() => {
@@ -380,7 +405,7 @@ export default function ChatArea({
 
         <div className="wa-date-divider">Today</div>
 
-        {activeContact.messages?.map((msg, index) => {
+        {renderedMessages.map((msg, index) => {
           const myUid = currentUser?.uid || currentUser?.id;
           const myUsername = currentUser?.username ? currentUser.username.toLowerCase() : '';
           const msgSenderId = String(msg.senderId || '');
