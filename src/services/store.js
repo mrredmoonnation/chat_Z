@@ -5,6 +5,36 @@ const USER_KEY = 'chatz_user_v1';
 const SETTINGS_KEY = 'chatz_settings_v1';
 const STORIES_KEY = 'chatz_stories_v1';
 const USERNAMES_KEY = 'chatz_usernames_registry_v1';
+const CALL_HISTORY_KEY = 'chatz_call_history_v1';
+
+// Get stored call history logs
+export const getStoredCallHistory = () => {
+  try {
+    const raw = localStorage.getItem(CALL_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+// Save a new call log entry to history
+export const saveCallLog = (logEntry) => {
+  if (!logEntry) return;
+  try {
+    const history = getStoredCallHistory();
+    // Keep most recent 200 calls
+    const updated = [logEntry, ...history].slice(0, 200);
+    localStorage.setItem(CALL_HISTORY_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    return [];
+  }
+};
+
+// Clear all call history
+export const clearCallHistory = () => {
+  localStorage.removeItem(CALL_HISTORY_KEY);
+};
 
 // Format username: lowercase, trim, remove leading @, keep only valid characters
 export const cleanUsername = (username) => {

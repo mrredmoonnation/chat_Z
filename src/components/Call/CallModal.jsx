@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2, Shield } from 'lucide-react';
 import { sounds } from '../../services/audioEffects';
-import { WebRTCService } from '../../services/webrtc';
 
 export default function CallModal({
   callState, // { isOpen, isIncoming, isAccepted, contact, isVideo }
@@ -16,7 +15,7 @@ export default function CallModal({
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
-  const webrtcRef = useRef(null);
+  const localStreamRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const statusRef = useRef('connecting'); // Ref to avoid stale closure in timeouts
 
@@ -43,7 +42,7 @@ export default function CallModal({
     sounds.startOutgoingTone();
 
     // Start local camera/mic preview for the caller
-    startLocalPreview();
+    startLocalMedia(callState.isVideo);
 
     // 45 seconds timeout if receiver doesn't answer
     const ringTimeout = setTimeout(() => {
@@ -55,7 +54,7 @@ export default function CallModal({
     return () => clearTimeout(ringTimeout);
   }, [callState?.isOpen, callState?.isIncoming]);
 
-  // When receiver answers (isAccepted becomes true) or when caller gets ACCEPT_CALL
+  // When receiver answers (isAccepted becomes true)
   useEffect(() => {
     if (callState?.isOpen && callState?.isAccepted && status !== 'connected') {
       sounds.stopRingtone();
@@ -64,26 +63,57 @@ export default function CallModal({
     }
   }, [callState?.isOpen, callState?.isAccepted]);
 
-  // Acquire local camera/mic stream
-  const startLocalPreview = async () => {
-    if (!webrtcRef.current) {
-      webrtcRef.current = new WebRTCService(
-        (remoteStream) => {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = remoteStream;
-          }
-        },
-        (connState) => {
-          console.log('Peer connection state:', connState);
-        }
-      );
-    }
+  // Listen for remote stream dispatched by App.jsx (for CALLER side audio/video)
+  useEffect(() => {
+    const handleRemoteStream = (event) => {
+      const remoteStream = event.detail?.stream;
+      if (!remoteStream) return;
+      console.log('📞 CallModal: Remote stream received via event');
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.play().catch(() => {});
+      }
+      // For audio-only calls, play audio through a hidden audio element
+      if (!callState?.isVideo) {
+        const audioEl = document.createElement('audio');
+        audioEl.srcObject = remoteStream;
+        audioEl.autoplay = true;
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        // Store for cleanup
+        localStreamRef._audioEl = audioEl;
+      }
+    };
 
-    const { stream } = await webrtcRef.current.getMediaStream(callState.isVideo);
-    if (localVideoRef.current && stream) {
-      localVideoRef.current.srcObject = stream;
+    window.addEventListener('wa_remote_stream', handleRemoteStream);
+    return () => window.removeEventListener('wa_remote_stream', handleRemoteStream);
+  }, [callState?.isVideo]);
+
+  // Acquire local camera/mic stream
+  const startLocalMedia = async (video = true) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        },
+        video: video
+          ? { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+          : false
+      });
+      localStreamRef.current = stream;
+
+      if (video && localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
+      }
+
+      return stream;
+    } catch (err) {
+      console.warn('📞 Could not get local media stream:', err);
+      return null;
     }
-    return stream;
   };
 
   // Start connected call once accepted
@@ -91,20 +121,27 @@ export default function CallModal({
     sounds.stopRingtone();
     setStatus('connected');
 
-    const stream = await startLocalPreview();
+    // Acquire local stream for RECEIVER (caller already has theirs from handleStartCall in App.jsx)
+    const stream = await startLocalMedia(callState?.isVideo);
 
-    // If PeerJS mediaCall is active on receiver side, answer it
+    // RECEIVER side: answer the incoming PeerJS media call
     if (p2pService?.activeMediaCall && stream) {
+      console.log('📞 Receiver answering PeerJS media call with local stream');
       p2pService.answerCall(stream, (remoteStream) => {
-        if (remoteVideoRef.current) {
+        console.log('📞 Receiver got remote stream from caller');
+        if (callState?.isVideo && remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(() => {});
+        } else {
+          // Audio call — play remote audio
+          const audioEl = document.createElement('audio');
+          audioEl.srcObject = remoteStream;
+          audioEl.autoplay = true;
+          audioEl.style.display = 'none';
+          document.body.appendChild(audioEl);
+          localStreamRef._audioEl = audioEl;
         }
       });
-    }
-
-    // Fallback display if direct remote stream is not yet established
-    if (remoteVideoRef.current && !remoteVideoRef.current.srcObject && stream && callState.isVideo) {
-      remoteVideoRef.current.srcObject = stream;
     }
 
     // Start duration timer
@@ -133,33 +170,42 @@ export default function CallModal({
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    if (webrtcRef.current) {
-      webrtcRef.current.cleanup();
-      webrtcRef.current = null;
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
     }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
+    // Cleanup hidden audio element if created
+    if (localStreamRef._audioEl) {
+      try {
+        localStreamRef._audioEl.pause();
+        localStreamRef._audioEl.srcObject = null;
+        localStreamRef._audioEl.remove();
+      } catch (e) {}
+      localStreamRef._audioEl = null;
     }
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     setIsMuted(false);
     setIsVideoOff(false);
+    setStatus('connecting');
+    setDuration(0);
   };
 
   const toggleMic = () => {
-    if (webrtcRef.current) {
-      const muted = webrtcRef.current.toggleAudio();
-      setIsMuted(muted);
+    if (localStreamRef.current) {
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      audioTracks.forEach((t) => { t.enabled = isMuted; }); // Toggle
+      setIsMuted(!isMuted);
     } else {
       setIsMuted(!isMuted);
     }
   };
 
   const toggleCamera = () => {
-    if (webrtcRef.current) {
-      const off = webrtcRef.current.toggleVideo();
-      setIsVideoOff(off);
+    if (localStreamRef.current) {
+      const videoTracks = localStreamRef.current.getVideoTracks();
+      videoTracks.forEach((t) => { t.enabled = isVideoOff; }); // Toggle
+      setIsVideoOff(!isVideoOff);
     } else {
       setIsVideoOff(!isVideoOff);
     }
@@ -179,7 +225,7 @@ export default function CallModal({
       <div className="wa-call-header">
         <div className="wa-call-type-badge">
           {callState.isVideo ? <Video size={16} color="#00a884" /> : <Phone size={16} color="#00a884" />}
-          <span>WhatsApp {callState.isVideo ? 'Video Call' : 'Voice Call'}</span>
+          <span>Chatz {callState.isVideo ? 'Video Call' : 'Voice Call'}</span>
         </div>
 
         <h2 className="wa-call-contact-name">{callState.contact.name}</h2>
@@ -188,6 +234,7 @@ export default function CallModal({
           {status === 'incoming' && 'Incoming Call...'}
           {status === 'ringing' && 'Ringing...'}
           {status === 'connected' && formatTime(duration)}
+          {status === 'connecting' && 'Connecting...'}
         </div>
       </div>
 
@@ -216,12 +263,18 @@ export default function CallModal({
             )}
           </div>
         ) : (
-          <div className="wa-call-avatar-pulse">
-            <img
-              src={callState.contact.avatar}
-              alt={callState.contact.name}
-            />
-          </div>
+          <>
+            {/* Hidden video elements for audio capture even on voice calls */}
+            <video ref={remoteVideoRef} autoPlay playsInline style={{ display: 'none' }} />
+            <video ref={localVideoRef} autoPlay playsInline muted style={{ display: 'none' }} />
+
+            <div className="wa-call-avatar-pulse">
+              <img
+                src={callState.contact.avatar}
+                alt={callState.contact.name}
+              />
+            </div>
+          </>
         )}
 
         {/* Security badge */}
@@ -276,6 +329,11 @@ export default function CallModal({
             <button
               className="wa-call-ctrl-btn"
               title="Speaker"
+              onClick={() => {
+                if (remoteVideoRef.current) {
+                  remoteVideoRef.current.volume = remoteVideoRef.current.volume > 0 ? 0 : 1;
+                }
+              }}
             >
               <Volume2 size={22} />
             </button>

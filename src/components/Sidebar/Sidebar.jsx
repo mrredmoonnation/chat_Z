@@ -37,6 +37,7 @@ export default function Sidebar({
   onOpenDisguise,
   partnerOnlineStatus,
   onStartCall,
+  callHistory,
   stories,
   onAddStory,
   onReplyToStory,
@@ -242,8 +243,9 @@ export default function Sidebar({
     setModalSearchQuery('');
   };
 
-  // Calls History (starts empty, only real calls recorded)
-  const [callsHistory] = useState([]);
+  // Calls History - from App.jsx (persistent localStorage)
+  const callsHistory = callHistory || [];
+  const missedCallCount = callsHistory.filter((c) => c.direction === 'missed').length;
 
   // Highlight matching text helper
   const highlightMatch = (text, query) => {
@@ -579,9 +581,27 @@ export default function Sidebar({
         <button
           className={`wa-sidebar-tab ${activeTab === 'calls' ? 'active' : ''}`}
           onClick={() => setActiveTab('calls')}
+          style={{ position: 'relative' }}
         >
           <Phone size={16} />
           <span>Calls</span>
+          {missedCallCount > 0 && activeTab !== 'calls' && (
+            <span style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              backgroundColor: 'var(--wa-danger)',
+              color: '#fff',
+              fontSize: 9,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>{missedCallCount > 9 ? '9+' : missedCallCount}</span>
+          )}
         </button>
       </div>
 
@@ -960,34 +980,54 @@ export default function Sidebar({
               <div style={{ padding: '12px 16px 6px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--wa-green-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Recent Calls
               </div>
-              {callsHistory.map((call) => (
-                <div key={call.id} className="wa-chat-item">
-                  <div className="wa-avatar">
-                    <img src={call.avatar} alt={call.contactName} />
-                  </div>
+              {callsHistory.map((call) => {
+                const isMissed = call.direction === 'missed';
+                const isIncoming = call.direction === 'incoming';
+                const durationStr = call.duration > 0
+                  ? ` · ${Math.floor(call.duration / 60)}:${String(call.duration % 60).padStart(2, '0')}`
+                  : '';
 
-                  <div className="wa-chat-info">
-                    <div className="wa-chat-name">{call.contactName}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', color: 'var(--wa-text-secondary)' }}>
-                      {call.direction === 'outgoing' && <ArrowUpRight size={14} color="var(--wa-green)" />}
-                      {call.direction === 'incoming' && <ArrowDownLeft size={14} color="var(--wa-green)" />}
-                      {call.direction === 'missed' && <PhoneMissed size={14} color="var(--wa-danger)" />}
-                      <span>{call.time}</span>
+                return (
+                  <div key={call.id} className="wa-chat-item">
+                    <div className="wa-avatar">
+                      <img src={call.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=call'} alt={call.contactName} />
                     </div>
-                  </div>
 
-                  <button
-                    className="wa-icon-btn"
-                    onClick={() => {
-                      const target = contacts.find((c) => c.name === call.contactName) || contacts[0];
-                      if (target) onStartCall(target, call.type === 'video');
-                    }}
-                    title={`Call ${call.contactName}`}
-                  >
-                    {call.type === 'video' ? <Video size={18} color="var(--wa-green)" /> : <Phone size={18} color="var(--wa-green)" />}
-                  </button>
-                </div>
-              ))}
+                    <div className="wa-chat-info">
+                      <div className="wa-chat-name" style={{ color: isMissed ? 'var(--wa-danger)' : 'var(--wa-text-primary)' }}>
+                        {call.contactName}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '12.5px', color: isMissed ? 'var(--wa-danger)' : 'var(--wa-text-secondary)' }}>
+                        {call.direction === 'outgoing' && <ArrowUpRight size={13} color="var(--wa-green)" />}
+                        {isIncoming && <ArrowDownLeft size={13} color="var(--wa-green)" />}
+                        {isMissed && <PhoneMissed size={13} color="var(--wa-danger)" />}
+                        <span>
+                          {call.type === 'video' ? '📹 ' : '📞 '}
+                          {isMissed ? 'Missed' : isIncoming ? 'Incoming' : 'Outgoing'}
+                          {durationStr}
+                          {' · '}{call.time}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      className="wa-icon-btn"
+                      onClick={() => {
+                        const target = contacts.find((c) =>
+                          c.name === call.contactName ||
+                          c.username === call.contactId ||
+                          c.id === call.contactId
+                        ) || contacts[0];
+                        if (target && onStartCall) onStartCall(target, call.type === 'video');
+                      }}
+                      title={`Call back ${call.contactName}`}
+                      style={{ color: 'var(--wa-green)' }}
+                    >
+                      {call.type === 'video' ? <Video size={18} /> : <Phone size={18} />}
+                    </button>
+                  </div>
+                );
+              })}
             </>
           )}
         </div>

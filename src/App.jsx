@@ -3,7 +3,8 @@ import {
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
   broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, 
-  matchesContact, AVATAR_PRESETS, isValidUsernameFormat
+  matchesContact, AVATAR_PRESETS, isValidUsernameFormat,
+  getStoredCallHistory, saveCallLog
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
@@ -245,6 +246,12 @@ export default function App() {
     contact: null,
     isVideo: false
   });
+
+  // Call history (persistent across sessions)
+  const [callHistory, setCallHistory] = useState(() => getStoredCallHistory());
+  const callStartTimeRef = useRef(null); // Track when a call was started
+  const callWasAcceptedRef = useRef(false); // Track if current call was ever accepted
+  const localStreamRef = useRef(null); // Store local stream for caller audio binding
 
   // Mobile navigation state
   const [showMobileChat, setShowMobileChat] = useState(false);
@@ -1298,25 +1305,73 @@ export default function App() {
   };
 
   const handleCallAcceptedSignal = () => {
-    console.log('Call was accepted by recipient!');
+    console.log('📞 Call was accepted by recipient!');
     sounds.stopRingtone();
+    callWasAcceptedRef.current = true;
     setCallState((prev) => ({
       ...prev,
       isIncoming: false,
       isAccepted: true
     }));
+
+    // ✅ CRITICAL FIX: Caller must now initiate WebRTC media call to the receiver
+    // This is the actual audio/video stream exchange on the CALLER side
+    const currentCallState = callState;
+    if (currentCallState?.contact && p2pRef.current && localStreamRef.current) {
+      const targetId = currentCallState.contact.username || 
+                       currentCallState.contact.id?.replace('wa_user_', '') ||
+                       currentCallState.contact.id;
+      if (targetId) {
+        console.log('📞 Initiating WebRTC media stream to:', targetId);
+        p2pRef.current.callUser(
+          targetId,
+          localStreamRef.current,
+          currentCallState.isVideo,
+          (remoteStream) => {
+            // Bind remote audio/video to CallModal via a DOM event
+            console.log('📞 Caller received remote stream from receiver');
+            const event = new CustomEvent('wa_remote_stream', { detail: { stream: remoteStream } });
+            window.dispatchEvent(event);
+          }
+        );
+      }
+    }
   };
 
   const handleCallEndedSignal = () => {
-    console.log('Call was ended by other party');
+    console.log('📞 Call was ended by other party');
     sounds.stopRingtone();
-    setCallState({ isOpen: false, isIncoming: false, isAccepted: false, contact: null, isVideo: false });
+    // If incoming call was ended before we accepted = missed call
+    setCallState((prev) => {
+      if (prev.isOpen && prev.isIncoming && !prev.isAccepted && prev.contact) {
+        const missedLog = {
+          id: 'call_' + Date.now(),
+          contactName: prev.contact.name || prev.contact.username || 'Unknown',
+          contactId: prev.contact.id || prev.contact.username,
+          avatar: prev.contact.avatar || AVATAR_PRESETS[0],
+          direction: 'missed',
+          type: prev.isVideo ? 'video' : 'voice',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: Date.now(),
+          duration: 0
+        };
+        const updated = saveCallLog(missedLog);
+        if (updated) setCallHistory(updated);
+      }
+      return { isOpen: false, isIncoming: false, isAccepted: false, contact: null, isVideo: false };
+    });
     p2pRef.current?.endCall();
+    localStreamRef.current = null;
+    callWasAcceptedRef.current = false;
+    callStartTimeRef.current = null;
   };
 
   // Start Call (Multi-channel Internet Cloud Signal + P2P)
-  const handleStartCall = (contact, isVideo) => {
+  const handleStartCall = async (contact, isVideo) => {
     if (!contact) return;
+    callWasAcceptedRef.current = false;
+    callStartTimeRef.current = Date.now();
+
     setCallState({
       isOpen: true,
       isIncoming: false,
@@ -1325,6 +1380,17 @@ export default function App() {
       isVideo
     });
     broadcastChange('START_CALL', { contact: currentUser, isVideo });
+
+    // Pre-acquire local media stream NOW so it's ready when receiver accepts
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: isVideo ? { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } : false
+      });
+      localStreamRef.current = stream;
+    } catch (err) {
+      console.warn('📞 Could not get local media stream for outgoing call:', err);
+    }
 
     // Caller's own identity for recipient to call back
     const callerInfo = {
@@ -1344,6 +1410,21 @@ export default function App() {
       callerId: callerInfo.id,
       isVideo
     };
+
+    // Save outgoing call log immediately
+    const outgoingLog = {
+      id: 'call_' + Date.now(),
+      contactName: contact.name || contact.username || 'Unknown',
+      contactId: contact.id || contact.username,
+      avatar: contact.avatar || AVATAR_PRESETS[0],
+      direction: 'outgoing',
+      type: isVideo ? 'video' : 'voice',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
+      duration: 0
+    };
+    const updatedHistory = saveCallLog(outgoingLog);
+    if (updatedHistory) setCallHistory(updatedHistory);
 
     // Send instant call notification to partner across all their aliases
     const targets = resolveTargetChannels(contact);
@@ -1368,9 +1449,29 @@ export default function App() {
 
   const handleAcceptCall = () => {
     sounds.stopRingtone();
+    callWasAcceptedRef.current = true;
+    callStartTimeRef.current = Date.now();
     setCallState((prev) => ({ ...prev, isIncoming: false, isAccepted: true }));
 
     const caller = callState.contact;
+
+    // Save incoming accepted call log
+    if (caller) {
+      const incomingLog = {
+        id: 'call_' + Date.now(),
+        contactName: caller.name || caller.username || 'Unknown',
+        contactId: caller.id || caller.username,
+        avatar: caller.avatar || AVATAR_PRESETS[0],
+        direction: 'incoming',
+        type: callState.isVideo ? 'video' : 'voice',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(),
+        duration: 0
+      };
+      const updatedHistory = saveCallLog(incomingLog);
+      if (updatedHistory) setCallHistory(updatedHistory);
+    }
+
     const targets = resolveTargetChannels(caller);
 
     const acceptPayload = {
@@ -1391,9 +1492,41 @@ export default function App() {
   const handleEndCall = () => {
     sounds.stopRingtone();
     const target = callState.contact;
+    const wasAccepted = callWasAcceptedRef.current;
+    const wasIncoming = callState.isIncoming;
+    const callDuration = callStartTimeRef.current ? Math.floor((Date.now() - callStartTimeRef.current) / 1000) : 0;
+
+    // Save missed call log if outgoing and never answered
+    if (!wasAccepted && !wasIncoming && target) {
+      setCallHistory((prev) => {
+        // Update the outgoing call we already saved — mark it as missed/no-answer
+        const updated = prev.map((c, i) =>
+          i === 0 && c.contactId === (target.id || target.username) && c.direction === 'outgoing'
+            ? { ...c, direction: 'missed', duration: 0 }
+            : c
+        );
+        localStorage.setItem('chatz_call_history_v1', JSON.stringify(updated));
+        return updated;
+      });
+    } else if (wasAccepted && target) {
+      // Update the call duration in existing log
+      setCallHistory((prev) => {
+        const updated = prev.map((c, i) =>
+          i === 0 && c.contactId === (target.id || target.username)
+            ? { ...c, duration: callDuration }
+            : c
+        );
+        localStorage.setItem('chatz_call_history_v1', JSON.stringify(updated));
+        return updated;
+      });
+    }
+
     setCallState({ isOpen: false, isIncoming: false, isAccepted: false, contact: null, isVideo: false });
     broadcastChange('END_CALL', {});
     p2pRef.current?.endCall();
+    localStreamRef.current = null;
+    callWasAcceptedRef.current = false;
+    callStartTimeRef.current = null;
 
     if (target) {
       const targets = resolveTargetChannels(target);
@@ -1430,6 +1563,7 @@ export default function App() {
             onOpenPartnerModal={() => setIsPartnerModalOpen(true)}
             partnerOnlineStatus={partnerOnlineStatus}
             onStartCall={handleStartCall}
+            callHistory={callHistory}
             stories={stories}
             onAddStory={handleAddStory}
             onReplyToStory={handleReplyToStory}
