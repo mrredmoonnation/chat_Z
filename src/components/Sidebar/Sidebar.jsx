@@ -14,6 +14,7 @@ import {
 } from '../../services/store';
 import { fetchCloudUsers } from '../../services/cloudRegistry';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
+import { compressAvatar } from '../../services/imageUtils';
 import StatusView from '../Status/StatusView';
 
 const DRAWER_BIO_PRESETS = [
@@ -41,6 +42,7 @@ export default function Sidebar({
   onReplyToStory,
   onDeleteStory,
   onDeleteStoryItem,
+  onStorySeen,
   theme,
   onToggleTheme,
   onUpdateProfile,
@@ -99,14 +101,15 @@ export default function Sidebar({
     setEditAvatar(newBitmoji);
   };
 
-  const handleDrawerFileUpload = (e) => {
+  const handleDrawerFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        setEditAvatar(uploadEvent.target.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressAvatar(file, 256, 0.8);
+        setEditAvatar(compressed);
+      } catch (err) {
+        console.error('Failed to compress avatar:', err);
+      }
     }
   };
 
@@ -921,6 +924,7 @@ export default function Sidebar({
           onReplyToStory={onReplyToStory}
           onDeleteStory={onDeleteStory}
           onDeleteStoryItem={onDeleteStoryItem}
+          onStorySeen={onStorySeen}
         />
       )}
 

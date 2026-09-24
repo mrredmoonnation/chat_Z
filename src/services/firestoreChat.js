@@ -9,6 +9,7 @@ import {
   setDoc, 
   updateDoc, 
   addDoc, 
+  deleteDoc,
   query, 
   where, 
   orderBy, 
@@ -271,6 +272,7 @@ export const sendFirestoreMessage = async (roomId, currentUser, messagePayload) 
   if (!db) return null;
 
   const textContent = messagePayload.text || '';
+  const mediaUrl = messagePayload.url || messagePayload.fileUrl || messagePayload.mediaUrl || null;
   const messageData = {
     roomId: roomId,
     senderId: currentUser.uid,
@@ -279,8 +281,11 @@ export const sendFirestoreMessage = async (roomId, currentUser, messagePayload) 
     senderAvatar: currentUser.photoURL || currentUser.avatar || '',
     text: textContent,
     type: messagePayload.type || 'text',
-    fileUrl: messagePayload.fileUrl || messagePayload.mediaUrl || null,
+    url: mediaUrl,
+    fileUrl: mediaUrl,
     fileName: messagePayload.fileName || null,
+    fileSize: messagePayload.fileSize || null,
+    caption: messagePayload.caption || null,
     status: 'sent',
     timestamp: serverTimestamp()
   };
@@ -291,8 +296,14 @@ export const sendFirestoreMessage = async (roomId, currentUser, messagePayload) 
 
     // 2. Update parent ChatRooms document with lastMessage & timestamp
     const roomRef = doc(db, 'ChatRooms', roomId);
+    const lastPreview = textContent 
+      || (messagePayload.type === 'image' ? '📷 Photo' : null)
+      || (messagePayload.type === 'voice' ? '🎤 Voice message' : null)
+      || (messagePayload.type === 'document' ? `📄 ${messagePayload.fileName || 'Document'}` : null)
+      || 'Sent a message';
+
     await updateDoc(roomRef, {
-      lastMessage: textContent || (messagePayload.type ? `[${messagePayload.type}]` : 'Sent a file'),
+      lastMessage: lastPreview,
       lastMessageTimestamp: serverTimestamp(),
       lastSenderId: currentUser.uid
     });
@@ -354,5 +365,225 @@ export const subscribeToRoomMessages = (roomId, onMessagesUpdate, onError) => {
   } catch (err) {
     console.warn('Failed to subscribe to room messages:', err);
     return () => {};
+  }
+};
+
+/**
+ * -------------------------------------------------------------
+ * 4. STORIES / STATUS COLLECTION (Document ID: uid)
+ * Real-time 24hr disappearing stories synced across all users & devices
+ * -------------------------------------------------------------
+ */
+
+// Mark incoming messages in a room as read / seen
+export const markFirestoreRoomMessagesAsRead = async (roomId, currentUid) => {
+  if (!roomId || !currentUid) return;
+  const db = getFirebaseFirestore();
+  if (!db) return;
+
+  try {
+    const q = query(
+      collection(db, 'ChatRooms', roomId, 'Messages'),
+      where('status', '!=', 'read'),
+      limit(25)
+    );
+    const snap = await getDocs(q);
+    const updates = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.senderId !== currentUid) {
+        updates.push(updateDoc(docSnap.ref, { status: 'read' }));
+      }
+    });
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+  } catch (e) {
+    // Non-blocking
+  }
+};
+
+// Publish or update a user's story in Firestore
+export const publishFirestoreStory = async (currentUser, storyItem) => {
+  const uid = currentUser?.uid || currentUser?.id;
+  if (!uid) return null;
+  const db = getFirebaseFirestore();
+  if (!db) return null;
+
+  const userStoryRef = doc(db, 'Stories', uid);
+
+  try {
+    const snap = await getDoc(userStoryRef);
+    let existingItems = [];
+
+    const now = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    if (snap.exists()) {
+      const data = snap.data();
+      // Keep only active items from the last 24 hours
+      existingItems = (data.items || []).filter((item) => {
+        const itemTime = item.timestamp || item.createdAt || now;
+        return (now - itemTime) < TWENTY_FOUR_HOURS;
+      });
+    }
+
+    const newItem = {
+      ...storyItem,
+      id: storyItem.id || 'item_' + Date.now(),
+      timestamp: storyItem.timestamp || now,
+      seenBy: []
+    };
+
+    const storyData = {
+      uid: uid,
+      contactId: uid,
+      contactName: currentUser.displayName || currentUser.name || currentUser.username || 'My Status',
+      username: currentUser.username || '',
+      avatar: currentUser.photoURL || currentUser.avatar || '',
+      timestamp: serverTimestamp(),
+      timeText: 'Just now',
+      items: [...existingItems, newItem],
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(userStoryRef, storyData, { merge: true });
+    return storyData;
+  } catch (err) {
+    console.error('Error publishing story to Firestore:', err);
+    throw err;
+  }
+};
+
+// Listen to all active stories across users (via onSnapshot)
+export const subscribeToFirestoreStories = (currentUid, onStoriesUpdate, onError) => {
+  const db = getFirebaseFirestore();
+  if (!db) return () => {};
+
+  try {
+    const storiesRef = collection(db, 'Stories');
+    const unsubscribe = onSnapshot(
+      storiesRef,
+      (snapshot) => {
+        const stories = [];
+        const now = Date.now();
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+        snapshot.forEach((d) => {
+          const data = d.data();
+          // Filter items younger than 24 hours
+          const activeItems = (data.items || []).filter((item) => {
+            const itemTime = item.timestamp || item.createdAt || now;
+            return (now - itemTime) < TWENTY_FOUR_HOURS;
+          });
+
+          if (activeItems.length > 0) {
+            const isMe = currentUid && (data.uid === currentUid || data.contactId === currentUid);
+            stories.push({
+              id: d.id,
+              uid: data.uid,
+              contactId: isMe ? 'user' : data.uid,
+              contactName: isMe ? 'My Status' : (data.contactName || data.username || 'Friend'),
+              username: data.username || '',
+              avatar: data.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${data.uid}`,
+              timeText: data.timeText || 'Today',
+              timestamp: data.updatedAt?.toMillis?.() || data.timestamp?.toMillis?.() || now,
+              items: activeItems
+            });
+          }
+        });
+
+        // Sort stories: current user's story first, then recent updates descending
+        stories.sort((a, b) => {
+          if (a.contactId === 'user') return -1;
+          if (b.contactId === 'user') return 1;
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+
+        onStoriesUpdate && onStoriesUpdate(stories);
+      },
+      (err) => {
+        console.warn('Stories snapshot error:', err);
+        onError && onError(err);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Failed to subscribeToFirestoreStories:', err);
+    return () => {};
+  }
+};
+
+// Delete entire user story document from Firestore
+export const deleteFirestoreStory = async (uid) => {
+  if (!uid) return;
+  const db = getFirebaseFirestore();
+  if (!db) return;
+
+  try {
+    await deleteDoc(doc(db, 'Stories', uid));
+  } catch (e) {
+    console.warn('Error deleting Firestore story:', e);
+  }
+};
+
+// Delete specific story item from user's story in Firestore
+export const deleteFirestoreStoryItem = async (uid, itemId) => {
+  if (!uid || !itemId) return;
+  const db = getFirebaseFirestore();
+  if (!db) return;
+
+  try {
+    const storyRef = doc(db, 'Stories', uid);
+    const snap = await getDoc(storyRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+    const remaining = (data.items || []).filter((it) => it.id !== itemId);
+
+    if (remaining.length === 0) {
+      await deleteDoc(storyRef);
+    } else {
+      await updateDoc(storyRef, {
+        items: remaining,
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch (e) {
+    console.warn('Error deleting story item:', e);
+  }
+};
+
+// Mark story as seen by a contact
+export const markFirestoreStorySeen = async (storyDocId, viewerUid, viewerName) => {
+  if (!storyDocId || !viewerUid || storyDocId === viewerUid || storyDocId === 'user') return;
+  const db = getFirebaseFirestore();
+  if (!db) return;
+
+  try {
+    const storyRef = doc(db, 'Stories', storyDocId);
+    const snap = await getDoc(storyRef);
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+    let hasChanged = false;
+    const updatedItems = (data.items || []).map((item) => {
+      const seenBy = item.seenBy || [];
+      if (!seenBy.some((v) => (typeof v === 'string' ? v === viewerUid : v.uid === viewerUid))) {
+        hasChanged = true;
+        return {
+          ...item,
+          seenBy: [...seenBy, { uid: viewerUid, name: viewerName || 'Contact', time: Date.now() }]
+        };
+      }
+      return item;
+    });
+
+    if (hasChanged) {
+      await updateDoc(storyRef, { items: updatedItems });
+    }
+  } catch (e) {
+    // Non-blocking
   }
 };

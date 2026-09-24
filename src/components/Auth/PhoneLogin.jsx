@@ -17,6 +17,7 @@ import {
 } from '../../services/firebase';
 import { sendRealEmailOtp } from '../../services/emailOtp';
 import { publishUserToCloud } from '../../services/cloudRegistry';
+import { compressAvatar } from '../../services/imageUtils';
 import { useAuth } from '../../context/AuthContext';
 
 const BIO_PRESETS = [
@@ -434,15 +435,16 @@ export default function PhoneLogin({ onLoginSuccess }) {
     validateAndSetUsername(e.target.value);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        setCustomAvatar(uploadEvent.target.result);
-        setAvatar(uploadEvent.target.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressAvatar(file, 256, 0.8);
+        setCustomAvatar(compressed);
+        setAvatar(compressed);
+      } catch (err) {
+        console.error('Failed to compress avatar:', err);
+      }
     }
   };
 

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Smile, Paperclip, Mic, Send, Image as ImageIcon, FileText, Camera, X, Trash2, CheckCircle2 } from 'lucide-react';
+import { compressImage } from '../../services/imageUtils';
 
 const EMOJIS = [
   '❤️', '💖', '😍', '🥰', '😘', '💋', '🙈', '🌹', '✨', '🥺', 
@@ -74,20 +75,23 @@ export default function ChatInput({
     setText((prev) => prev + emoji);
   };
 
-  // Image Upload
-  const handleImageSelect = (e) => {
+  // Image Upload with Instant Compression (prevents blank screen crash)
+  const handleImageSelect = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+      try {
+        const compressedUrl = await compressImage(file, 1200, 1200, 0.75);
         onSendMessage({
           type: 'image',
-          url: ev.target.result,
+          url: compressedUrl,
+          fileUrl: compressedUrl,
           caption: file.name
         });
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Image compression error:', err);
+      }
     }
+    e.target.value = '';
     setShowAttach(false);
   };
 

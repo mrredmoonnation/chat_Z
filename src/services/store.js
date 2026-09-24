@@ -158,7 +158,21 @@ export const getStoredContacts = () => {
 };
 
 export const saveStoredContacts = (contacts) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+  } catch (err) {
+    console.warn('LocalStorage quota warning in saveStoredContacts:', err);
+    try {
+      // Auto-prune message history per contact (keep latest 30 messages) to prevent crashing
+      const pruned = contacts.map((c) => ({
+        ...c,
+        messages: (c.messages || []).slice(-30)
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+    } catch (e2) {
+      console.warn('Failed to prune contacts in localStorage:', e2);
+    }
+  }
   broadcastChange('CONTACTS_UPDATED', contacts);
 };
 
@@ -183,7 +197,18 @@ export const getStoredStories = () => {
 };
 
 export const saveStoredStories = (stories) => {
-  localStorage.setItem(STORIES_KEY, JSON.stringify(stories));
+  try {
+    localStorage.setItem(STORIES_KEY, JSON.stringify(stories));
+  } catch (err) {
+    console.warn('LocalStorage quota warning in saveStoredStories:', err);
+    try {
+      // Prune to most recent active stories
+      const recent = stories.slice(0, 10);
+      localStorage.setItem(STORIES_KEY, JSON.stringify(recent));
+    } catch (e2) {
+      console.warn('Failed to prune stories in localStorage:', e2);
+    }
+  }
   broadcastChange('STORIES_UPDATED', stories);
 };
 

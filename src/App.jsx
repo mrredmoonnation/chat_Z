@@ -13,7 +13,13 @@ import {
   createFirestoreGroupRoom, 
   subscribeToUserRooms, 
   sendFirestoreMessage, 
-  subscribeToRoomMessages 
+  subscribeToRoomMessages,
+  markFirestoreRoomMessagesAsRead,
+  publishFirestoreStory,
+  subscribeToFirestoreStories,
+  deleteFirestoreStory,
+  deleteFirestoreStoryItem,
+  markFirestoreStorySeen
 } from './services/firestoreChat';
 import PhoneLogin from './components/Auth/PhoneLogin';
 import Sidebar from './components/Sidebar/Sidebar';
@@ -64,10 +70,30 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser?.uid]);
 
+  // Real-time Firestore Stories / Status sync across all devices & users
+  useEffect(() => {
+    const uid = currentUser?.uid || currentUser?.id;
+    if (!uid) return;
+
+    const unsubscribe = subscribeToFirestoreStories(
+      uid,
+      (syncedStories) => {
+        if (syncedStories) {
+          setStories(syncedStories);
+          saveStoredStories(syncedStories);
+        }
+      },
+      (err) => {
+        console.warn('Firestore stories sync notice:', err);
+      }
+    );
+    return () => unsubscribe();
+  }, [currentUser?.uid, currentUser?.id]);
+
   // Merge real-time Firestore rooms with local contacts
   const mergedContacts = React.useMemo(() => {
     if (!firestoreRooms || firestoreRooms.length === 0) {
-      return contacts;
+      return contacts.map((c) => (c.id === activeContactId ? { ...c, unreadCount: 0 } : c));
     }
 
     const roomContacts = firestoreRooms.map((r) => {
@@ -84,7 +110,7 @@ export default function App() {
           lastSeen: 'Group',
           lastMessage: r.lastMessage || '',
           lastMessageTimestamp: r.lastMessageTimestamp,
-          unreadCount: 0,
+          unreadCount: activeContactId === r.id ? 0 : (existing?.unreadCount || 0),
           messages: existing?.messages || []
         };
       }
@@ -106,15 +132,18 @@ export default function App() {
         lastSeen: 'Online',
         lastMessage: r.lastMessage || '',
         lastMessageTimestamp: r.lastMessageTimestamp,
-        unreadCount: 0,
+        unreadCount: activeContactId === r.id ? 0 : (existing?.unreadCount || 0),
         messages: existing?.messages || []
       };
     });
 
     const roomIds = new Set(roomContacts.map((c) => c.id));
-    const nonRoomContacts = contacts.filter((c) => !roomIds.has(c.id));
+    const nonRoomContacts = contacts
+      .filter((c) => !roomIds.has(c.id))
+      .map((c) => (c.id === activeContactId ? { ...c, unreadCount: 0 } : c));
+
     return [...roomContacts, ...nonRoomContacts];
-  }, [firestoreRooms, contacts, currentUser?.uid]);
+  }, [firestoreRooms, contacts, currentUser?.uid, activeContactId]);
 
   // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
   useEffect(() => {
@@ -125,15 +154,19 @@ export default function App() {
 
     if (!roomId) return;
 
+    if (currentUser?.uid) {
+      markFirestoreRoomMessagesAsRead(roomId, currentUser.uid);
+    }
+
     const unsubscribe = subscribeToRoomMessages(
       roomId,
       (firestoreMessages) => {
         setContacts((prev) => {
           const exists = prev.some((c) => c.id === activeContactId);
           if (exists) {
-            return prev.map((c) => (c.id === activeContactId ? { ...c, messages: firestoreMessages } : c));
+            return prev.map((c) => (c.id === activeContactId ? { ...c, messages: firestoreMessages, unreadCount: 0 } : c));
           } else if (target) {
-            return [{ ...target, messages: firestoreMessages }, ...prev];
+            return [{ ...target, messages: firestoreMessages, unreadCount: 0 }, ...prev];
           }
           return prev;
         });
@@ -144,7 +177,7 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [activeContactId, mergedContacts]);
+  }, [activeContactId]);
 
   // Online P2P state
   const p2pRef = useRef(null);
@@ -169,6 +202,32 @@ export default function App() {
     setActiveContactId(id);
     setShowMobileChat(true);
 
+    // Clear unread count for this contact immediately and mark messages as read
+    setContacts((prev) => {
+      const updated = prev.map((c) => {
+        if (c.id === id || c.roomId === id) {
+          return {
+            ...c,
+            unreadCount: 0,
+            messages: (c.messages || []).map((m) =>
+              m.senderId !== (currentUser?.uid || currentUser?.id || 'user')
+                ? { ...m, status: 'read' }
+                : m
+            )
+          };
+        }
+        return c;
+      });
+      saveStoredContacts(updated);
+      return updated;
+    });
+
+    // Mark messages as read in Firestore if roomId
+    const targetRoomId = id.startsWith('room_') ? id : mergedContacts.find((c) => c.id === id)?.roomId;
+    if (targetRoomId && currentUser?.uid) {
+      markFirestoreRoomMessagesAsRead(targetRoomId, currentUser.uid);
+    }
+
     // Push new history state
     if (!window.history.state || window.history.state.waView !== 'chat' || window.history.state.contactId !== id) {
       window.history.pushState({ waView: 'chat', contactId: id }, '');
@@ -179,6 +238,11 @@ export default function App() {
     const targetIdentifier = targetContact?.username || (id?.startsWith('wa_user_') ? id.replace('wa_user_', '') : targetContact?.phone);
     if (targetIdentifier && p2pRef.current) {
       p2pRef.current.connectToPartner(targetIdentifier);
+      p2pRef.current.sendData({
+        type: 'P2P_READ',
+        readerId: currentUser?.uid || currentUser?.id,
+        readerUsername: currentUser?.username
+      }, `wa_user_${targetIdentifier}`);
     }
   };
 
@@ -286,6 +350,11 @@ export default function App() {
 
           setContacts((prev) => {
             const partner = prev.find((c) => c.id === senderPeerId || (senderUsername && c.username === senderUsername));
+            const isCurrentlyActive = activeContactId === senderPeerId || (partner && activeContactId === partner.id);
+            if (isCurrentlyActive) {
+              incomingMsg.status = 'read';
+            }
+
             if (partner) {
               if (partner.messages?.some((m) => m.id === incomingMsg.id)) {
                 return prev;
@@ -295,7 +364,7 @@ export default function App() {
                   ? {
                       ...c,
                       messages: [...(c.messages || []), incomingMsg],
-                      unreadCount: (c.unreadCount || 0) + 1,
+                      unreadCount: isCurrentlyActive ? 0 : ((c.unreadCount || 0) + 1),
                       isOnline: true,
                       lastSeen: 'Online'
                     }
@@ -313,7 +382,7 @@ export default function App() {
                 about: 'Connected on Chatz',
                 isOnline: true,
                 lastSeen: 'Online',
-                unreadCount: 1,
+                unreadCount: isCurrentlyActive ? 0 : 1,
                 messages: [incomingMsg]
               };
               const updated = [newPartner, ...prev];
@@ -447,22 +516,26 @@ export default function App() {
             });
           }
 
-          setContacts((prev) => {
-            const partner = prev.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
-            const targetId = partner ? partner.id : senderPeerId;
-            const incomingMsg = {
-              ...payload.message,
-              id: 'p2p_' + Date.now(),
-              senderId: targetId
-            };
+          const partner = contacts.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
+          const targetId = partner ? partner.id : senderPeerId;
+          const isCurrentlyActive = activeContactId === targetId || activeContactId === senderPeerId || (partner && activeContactId === partner.id);
 
-            if (partner) {
+          const incomingMsg = {
+            ...payload.message,
+            id: 'p2p_' + Date.now(),
+            senderId: targetId,
+            status: isCurrentlyActive ? 'read' : 'delivered'
+          };
+
+          setContacts((prev) => {
+            const existingPartner = prev.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
+            if (existingPartner) {
               const updated = prev.map((c) => {
-                if (c.id === partner.id) {
+                if (c.id === existingPartner.id) {
                   return {
                     ...c,
                     messages: [...(c.messages || []), incomingMsg],
-                    unreadCount: (c.unreadCount || 0) + 1,
+                    unreadCount: isCurrentlyActive ? 0 : ((c.unreadCount || 0) + 1),
                     isOnline: true,
                     lastSeen: 'Online (Live P2P)'
                   };
@@ -481,7 +554,7 @@ export default function App() {
                 about: 'Connected Live on Chatz',
                 isOnline: true,
                 lastSeen: 'Online (Live P2P)',
-                unreadCount: 1,
+                unreadCount: isCurrentlyActive ? 0 : 1,
                 messages: [incomingMsg]
               };
               const updated = [newPartner, ...prev];
@@ -494,12 +567,14 @@ export default function App() {
           // Acknowledge delivery over P2P
           if (payload.message?.id) {
             p2pRef.current?.sendData({
-              type: 'P2P_DELIVERED',
-              messageId: payload.message.id
+              type: isCurrentlyActive ? 'P2P_READ' : 'P2P_DELIVERED',
+              messageId: payload.message.id,
+              readerId: currentUser?.uid || currentUser?.id,
+              readerUsername: currentUser?.username
             }, senderPeerId);
           }
         } else if (payload?.type === 'P2P_DELIVERED') {
-          // Double tick delivery update
+          // Double grey tick delivery update
           setContacts((prev) => {
             const updated = prev.map((c) => ({
               ...c,
@@ -507,6 +582,23 @@ export default function App() {
                 m.id === payload.messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
               )
             }));
+            saveStoredContacts(updated);
+            return updated;
+          });
+        } else if (payload?.type === 'P2P_READ') {
+          // Double blue ticks seen update
+          setContacts((prev) => {
+            const updated = prev.map((c) => {
+              if (c.id === peerId || (payload.readerUsername && c.username === payload.readerUsername)) {
+                return {
+                  ...c,
+                  messages: (c.messages || []).map((m) =>
+                    m.senderId === (currentUser?.uid || currentUser?.id || 'user') ? { ...m, status: 'read' } : m
+                  )
+                };
+              }
+              return c;
+            });
             saveStoredContacts(updated);
             return updated;
           });
@@ -806,16 +898,16 @@ export default function App() {
     });
   };
 
-  // Add new Story (supports multiple slides / updates)
-  const handleAddStory = (item) => {
+  // Add new Story (supports multiple slides / updates + Firestore real-time sync)
+  const handleAddStory = async (item) => {
     const existingIndex = stories.findIndex((s) => s.contactId === 'user');
     let updated;
     if (existingIndex >= 0) {
       const existing = stories[existingIndex];
       const updatedUserStory = {
         ...existing,
-        contactName: currentUser?.name || 'My Status',
-        avatar: currentUser?.avatar,
+        contactName: currentUser?.displayName || currentUser?.name || 'My Status',
+        avatar: currentUser?.photoURL || currentUser?.avatar,
         timestamp: Date.now(),
         timeText: 'Just now',
         items: [...(existing.items || []), item]
@@ -826,8 +918,8 @@ export default function App() {
       const newStory = {
         id: 'story_user_' + Date.now(),
         contactId: 'user',
-        contactName: currentUser?.name || 'My Status',
-        avatar: currentUser?.avatar,
+        contactName: currentUser?.displayName || currentUser?.name || 'My Status',
+        avatar: currentUser?.photoURL || currentUser?.avatar,
         timestamp: Date.now(),
         timeText: 'Just now',
         items: [item]
@@ -836,17 +928,30 @@ export default function App() {
     }
     setStories(updated);
     saveStoredStories(updated);
+
+    // Sync to Firestore so ALL other users on all devices can see it in real-time!
+    if (currentUser) {
+      try {
+        await publishFirestoreStory(currentUser, item);
+      } catch (err) {
+        console.warn('Firestore story publish error:', err);
+      }
+    }
   };
 
   // Delete entire story
-  const handleDeleteStory = (storyId) => {
+  const handleDeleteStory = async (storyId) => {
     const updated = stories.filter((s) => s.id !== storyId);
     setStories(updated);
     saveStoredStories(updated);
+    const uid = currentUser?.uid || currentUser?.id;
+    if (uid) {
+      deleteFirestoreStory(uid);
+    }
   };
 
   // Delete specific item (slide) within a story
-  const handleDeleteStoryItem = (storyId, itemId) => {
+  const handleDeleteStoryItem = async (storyId, itemId) => {
     const updated = stories
       .map((s) => {
         if (s.id === storyId) {
@@ -862,6 +967,21 @@ export default function App() {
 
     setStories(updated);
     saveStoredStories(updated);
+    const uid = currentUser?.uid || currentUser?.id;
+    if (uid) {
+      deleteFirestoreStoryItem(uid, itemId);
+    }
+  };
+
+  // Mark story as seen
+  const handleStorySeen = (storyDocId) => {
+    const uid = currentUser?.uid || currentUser?.id;
+    if (!uid || !storyDocId) return;
+    markFirestoreStorySeen(
+      storyDocId,
+      uid,
+      currentUser?.displayName || currentUser?.name || currentUser?.username
+    );
   };
 
   // Reply to story
@@ -961,6 +1081,7 @@ export default function App() {
             onReplyToStory={handleReplyToStory}
             onDeleteStory={handleDeleteStory}
             onDeleteStoryItem={handleDeleteStoryItem}
+            onStorySeen={handleStorySeen}
             theme={settings.theme}
             onToggleTheme={handleToggleTheme}
             onUpdateProfile={handleUpdateProfile}

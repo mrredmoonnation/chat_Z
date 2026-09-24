@@ -409,12 +409,24 @@ export default function ChatArea({
                 )}
 
                 {/* Image Message */}
-                {msg.type === 'image' && (
+                {msg.type === 'image' && (msg.url || msg.fileUrl || msg.mediaUrl) && (
                   <div
                     className="wa-bubble-image"
-                    onClick={() => setPreviewImage(msg.url)}
+                    onClick={() => setPreviewImage(msg.url || msg.fileUrl || msg.mediaUrl)}
                   >
-                    <img src={msg.url} alt="Shared" />
+                    <img 
+                      src={msg.url || msg.fileUrl || msg.mediaUrl} 
+                      alt={msg.caption || "Shared"} 
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    {msg.caption && (
+                      <div className="wa-bubble-text" style={{ paddingTop: 4 }}>
+                        {highlightInChat(msg.caption, inChatSearchQuery)}
+                      </div>
+                    )}
                   </div>
                 )}
 

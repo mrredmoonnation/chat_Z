@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight, Send, Camera, Type, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { compressImage } from '../../services/imageUtils';
 
 const BG_COLORS = ['#00a884', '#7c3aed', '#2563eb', '#db2777', '#d97706', '#dc2626'];
 
@@ -9,7 +10,8 @@ export default function StatusView({
   onAddStory,
   onReplyToStory,
   onDeleteStory,
-  onDeleteStoryItem
+  onDeleteStoryItem,
+  onStorySeen
 }) {
   const [activeStory, setActiveStory] = useState(null); // story object
   const [activeItemIndex, setActiveItemIndex] = useState(0);
@@ -28,10 +30,20 @@ export default function StatusView({
 
   // Distinguish my story from other contacts' stories
   const myStory = stories.find(
-    (s) => (s.contactId === 'user' || s.contactId === currentUser?.id) && s.items && s.items.length > 0
+    (s) => (
+      s.contactId === 'user' || 
+      (currentUser?.id && s.contactId === currentUser.id) || 
+      (currentUser?.uid && s.uid === currentUser.uid) ||
+      (currentUser?.username && s.username === currentUser.username)
+    ) && s.items && s.items.length > 0
   );
   const otherStories = stories.filter(
-    (s) => s.contactId !== 'user' && s.contactId !== currentUser?.id && s.items && s.items.length > 0
+    (s) => !(
+      s.contactId === 'user' || 
+      (currentUser?.id && s.contactId === currentUser.id) || 
+      (currentUser?.uid && s.uid === currentUser.uid) ||
+      (currentUser?.username && s.username === currentUser.username)
+    ) && s.items && s.items.length > 0
   );
 
   // Story Timer
@@ -63,6 +75,9 @@ export default function StatusView({
     setActiveItemIndex(0);
     setProgress(0);
     setIsPaused(false);
+    if (onStorySeen && story.contactId !== 'user') {
+      onStorySeen(story.id || story.uid || story.contactId);
+    }
   };
 
   const nextItem = () => {
@@ -101,13 +116,15 @@ export default function StatusView({
       type: 'text',
       text: newText.trim(),
       bgColor: newBgColor,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now()
     } : {
       id: 'item_' + Date.now(),
       type: 'image',
       url: newImageUrl,
       caption: newCaption.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now()
     };
 
     onAddStory(newItem);
@@ -117,14 +134,15 @@ export default function StatusView({
     setNewCaption('');
   };
 
-  const handleImageFileChange = (e) => {
+  const handleImageFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setNewImageUrl(ev.target.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1080, 1080, 0.75);
+        setNewImageUrl(compressed);
+      } catch (err) {
+        console.error('Failed to compress status image:', err);
+      }
     }
   };
 
@@ -420,7 +438,7 @@ export default function StatusView({
             {isMyStoryActive ? (
               <div className="wa-story-my-status-bar">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'rgba(255, 255, 255, 0.85)' }}>
-                  <span>👁️ Viewed by your contacts</span>
+                  <span>👁️ {currentItem.seenBy?.length ? `${currentItem.seenBy.length} ${currentItem.seenBy.length === 1 ? 'view' : 'views'}` : 'Viewed by your contacts'}</span>
                 </div>
                 <button
                   type="button"
