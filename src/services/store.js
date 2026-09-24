@@ -18,6 +18,52 @@ export const isValidUsernameFormat = (username) => {
   return /^[a-z0-9_.]{3,20}$/.test(clean);
 };
 
+// Universal matcher to identify if a contact matches a given ID, Room, Username, UID, or sender object
+export const matchesContact = (contact, identifierOrObj) => {
+  if (!contact || !identifierOrObj) return false;
+
+  // 1. If identifierOrObj is a plain string
+  if (typeof identifierOrObj === 'string') {
+    const raw = identifierOrObj.trim();
+    if (!raw) return false;
+    const clean = raw.toLowerCase().replace(/^wa_user_|^user_/, '');
+
+    if (contact.id === raw || contact.roomId === raw) return true;
+    if (contact.uid === raw || contact.otherUid === raw) return true;
+    if (contact.username && contact.username.toLowerCase() === clean) return true;
+    if (contact.phone && contact.phone === raw) return true;
+
+    const contactClean = String(contact.id || '').toLowerCase().replace(/^wa_user_|^user_/, '');
+    if (contactClean && contactClean === clean) return true;
+
+    const contactRoomClean = String(contact.roomId || '').toLowerCase();
+    if (contactRoomClean && contactRoomClean.includes(clean)) return true;
+
+    return false;
+  }
+
+  // 2. If identifierOrObj is an object (sender payload or another contact)
+  const obj = identifierOrObj;
+  const targetId = obj.id || obj.roomId || obj.senderId || obj.peerId;
+  const targetUsername = cleanUsername(obj.username || obj.senderUsername || '');
+  const targetUid = obj.uid || obj.otherUid;
+
+  if (targetId && (contact.id === targetId || contact.roomId === targetId)) return true;
+  if (targetUid && (contact.uid === targetUid || contact.otherUid === targetUid)) return true;
+  if (targetUsername && contact.username && cleanUsername(contact.username) === targetUsername) return true;
+
+  if (targetId) {
+    const cleanTarget = String(targetId).toLowerCase().replace(/^wa_user_|^user_/, '');
+    const cleanContactId = String(contact.id || '').toLowerCase().replace(/^wa_user_|^user_/, '');
+    if (cleanTarget && cleanContactId && cleanTarget === cleanContactId) return true;
+    if (contact.username && cleanUsername(contact.username) === cleanTarget) return true;
+  }
+
+  if (obj.roomId && contact.roomId && obj.roomId === contact.roomId) return true;
+
+  return false;
+};
+
 // Get registered usernames registry map { [cleanUsername]: userProfile }
 export const getRegisteredUsernames = () => {
   try {

@@ -179,7 +179,12 @@ export default function StatusView({
     setIsPaused(false);
   };
 
-  const isMyStoryActive = activeStory && (activeStory.contactId === 'user' || activeStory.contactId === currentUser?.id);
+  const isMyStoryActive = activeStory && (
+    activeStory.contactId === 'user' || 
+    (currentUser?.id && activeStory.contactId === currentUser.id) ||
+    (currentUser?.uid && (activeStory.uid === currentUser.uid || activeStory.contactId === currentUser.uid)) ||
+    (currentUser?.username && (activeStory.username === currentUser.username || activeStory.contactId === activeStory.username))
+  );
   const currentItem = activeStory?.items?.[activeItemIndex] || activeStory?.items?.[0];
 
   return (

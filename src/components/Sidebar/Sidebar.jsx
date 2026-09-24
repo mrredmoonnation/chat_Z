@@ -10,7 +10,7 @@ import {
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
   isUsernameAvailable, cleanUsername, 
   isValidUsernameFormat, registerUsername, searchUsersByUsername,
-  subscribeToBroadcast
+  subscribeToBroadcast, matchesContact
 } from '../../services/store';
 import { fetchCloudUsers } from '../../services/cloudRegistry';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
@@ -765,7 +765,17 @@ export default function Sidebar({
               <>
                 {filteredContacts.map((contact) => {
                   const lastMsg = contact.messages?.[contact.messages.length - 1];
-                  const isSelected = contact.id === activeContactId;
+                  const isSelected = Boolean(activeContactId && matchesContact(contact, activeContactId));
+
+                  const isLastMsgOutgoing = lastMsg && (
+                    lastMsg.senderId === 'user' ||
+                    (currentUser?.uid && (lastMsg.senderId === currentUser.uid || lastMsg.senderId === `user_${currentUser.uid}`)) ||
+                    (currentUser?.username && (
+                      lastMsg.senderId === currentUser.username ||
+                      lastMsg.senderId === `wa_user_${currentUser.username}` ||
+                      (lastMsg.senderUsername && lastMsg.senderUsername.toLowerCase() === currentUser.username.toLowerCase())
+                    ))
+                  );
 
                   // Check if any message in this chat matches the query
                   const matchedMsg = q
@@ -782,7 +792,7 @@ export default function Sidebar({
                   return (
                     <div
                       key={contact.id}
-                      className={`wa-chat-item ${isSelected ? 'active' : ''} ${contact.unreadCount > 0 ? 'unread' : ''}`}
+                      className={`wa-chat-item ${isSelected ? 'active' : ''} ${!isSelected && contact.unreadCount > 0 ? 'unread' : ''}`}
                       onClick={() => onSelectContact(contact.id)}
                       id={`chatItem_${contact.id}`}
                     >
@@ -808,8 +818,12 @@ export default function Sidebar({
                               'typing...'
                             ) : (
                               <>
-                                {lastMsg?.senderId === 'user' && !matchedMsg && (
-                                  <CheckCheck size={14} color="#53bdeb" style={{ flexShrink: 0 }} />
+                                {isLastMsgOutgoing && !matchedMsg && (
+                                  <CheckCheck 
+                                    size={14} 
+                                    color={lastMsg?.status === 'read' ? "#53bdeb" : "var(--wa-text-secondary)"} 
+                                    style={{ flexShrink: 0 }} 
+                                  />
                                 )}
                                 <span>
                                   {matchedMsg ? (
@@ -833,7 +847,7 @@ export default function Sidebar({
                             )}
                           </div>
 
-                          {contact.unreadCount > 0 && (
+                          {!isSelected && contact.unreadCount > 0 && (
                             <div className="wa-unread-badge">{contact.unreadCount}</div>
                           )}
                         </div>

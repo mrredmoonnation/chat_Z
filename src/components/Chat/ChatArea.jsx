@@ -381,7 +381,19 @@ export default function ChatArea({
         <div className="wa-date-divider">Today</div>
 
         {activeContact.messages?.map((msg, index) => {
-          const isOutgoing = msg.senderId === 'user' || msg.senderId === currentUser?.id;
+          const myUid = currentUser?.uid || currentUser?.id;
+          const myUsername = currentUser?.username ? currentUser.username.toLowerCase() : '';
+          const msgSenderId = String(msg.senderId || '');
+          const msgSenderUsername = String(msg.senderUsername || '').toLowerCase();
+
+          const isOutgoing = 
+            msgSenderId === 'user' ||
+            (myUid && (msgSenderId === myUid || msgSenderId === `user_${myUid}`)) ||
+            (myUsername && (
+              msgSenderId === myUsername ||
+              msgSenderId === `wa_user_${myUsername}` ||
+              msgSenderUsername === myUsername
+            ));
           const isCurrentMatch = matchingMsgIds[currentMatchIndex] === msg.id;
           const isMatch = matchingMsgIds.includes(msg.id);
 

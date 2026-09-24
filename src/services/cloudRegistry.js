@@ -9,26 +9,38 @@ const BROKER_PORT = 8084;
 const BROKER_PATH = '/mqtt';
 
 let mqttClient = null;
-let currentSubscribedUser = null;
+let currentSubscribedUsers = new Set();
 let isConnected = false;
 let messageHandlers = new Set();
 let pendingPublishQueue = [];
 
 // Initialize or reconnect MQTT client
-export const initRealtimeCloud = (myUsername, onMessageReceived) => {
+export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
   if (onMessageReceived) {
     messageHandlers.add(onMessageReceived);
   }
 
-  const cleanU = cleanUsername(myUsername);
-  if (!cleanU) return;
+  const rawList = Array.isArray(myUsernamesOrIds) ? myUsernamesOrIds : [myUsernamesOrIds];
+  const cleanList = rawList
+    .map((u) => cleanUsername(u))
+    .filter(Boolean);
 
-  if (mqttClient && isConnected && currentSubscribedUser === cleanU) {
+  if (cleanList.length === 0) return;
+
+  cleanList.forEach((id) => currentSubscribedUsers.add(id));
+
+  // If already connected, just ensure new channels are subscribed
+  if (mqttClient && isConnected) {
+    cleanList.forEach((id) => {
+      try {
+        mqttClient.subscribe(`chatz_v2/user/${id}`, { qos: 1 });
+      } catch (e) {}
+    });
     return;
   }
 
-  currentSubscribedUser = cleanU;
-  const clientId = `chatz_${cleanU}_${Math.random().toString(36).substring(2, 8)}`;
+  const primaryClean = cleanList[0];
+  const clientId = `chatz_${primaryClean}_${Math.random().toString(36).substring(2, 8)}`;
 
   try {
     if (mqttClient) {
@@ -42,8 +54,8 @@ export const initRealtimeCloud = (myUsername, onMessageReceived) => {
       console.warn('Realtime Cloud disconnected:', responseObject.errorMessage);
       // Auto-reconnect after 3 seconds
       setTimeout(() => {
-        if (currentSubscribedUser) {
-          initRealtimeCloud(currentSubscribedUser);
+        if (currentSubscribedUsers.size > 0) {
+          initRealtimeCloud(Array.from(currentSubscribedUsers));
         }
       }, 3000);
     };
@@ -54,15 +66,18 @@ export const initRealtimeCloud = (myUsername, onMessageReceived) => {
         const payloadStr = message.payloadString;
         const data = JSON.parse(payloadStr);
 
-        // 1. Direct incoming 1-to-1 message for this user
-        if (topic === `chatz_v2/user/${cleanU}`) {
-          messageHandlers.forEach((handler) => {
-            try { handler([data]); } catch (err) { console.error('Handler error:', err); }
-          });
+        // 1. Direct incoming 1-to-1 message for this user (any of their registered channels)
+        if (topic.startsWith('chatz_v2/user/')) {
+          const targetTopicUser = topic.replace('chatz_v2/user/', '');
+          if (currentSubscribedUsers.has(targetTopicUser)) {
+            messageHandlers.forEach((handler) => {
+              try { handler([data]); } catch (err) { console.error('Handler error:', err); }
+            });
+          }
         }
         // 2. Directory discovery announcement
         else if (topic === 'chatz_v2/directory/announce') {
-          if (data?.username && data.username !== cleanU) {
+          if (data?.username && !currentSubscribedUsers.has(cleanUsername(data.username))) {
             registerUsername(data.username, data);
           }
         }
@@ -92,8 +107,13 @@ export const initRealtimeCloud = (myUsername, onMessageReceived) => {
         isConnected = true;
         console.log('Realtime Cloud Connected via secure WebSocket');
 
-        // Subscribe to our private message inbox
-        mqttClient.subscribe(`chatz_v2/user/${cleanU}`, { qos: 1 });
+        // Subscribe to all of our private user inbox channels
+        currentSubscribedUsers.forEach((id) => {
+          try {
+            mqttClient.subscribe(`chatz_v2/user/${id}`, { qos: 1 });
+          } catch (e) {}
+        });
+
         // Subscribe to global user directory discovery
         mqttClient.subscribe('chatz_v2/directory/announce', { qos: 0 });
         mqttClient.subscribe('chatz_v2/directory/query', { qos: 0 });

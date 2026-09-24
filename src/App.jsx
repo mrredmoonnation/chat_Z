@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
-  broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, AVATAR_PRESETS
+  broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, 
+  matchesContact, AVATAR_PRESETS
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
-import { fetchCloudUsers, publishUserToCloud, pollCloudInbox } from './services/cloudRegistry';
+import { fetchCloudUsers, publishUserToCloud, pollCloudInbox, sendCloudInboxMessage } from './services/cloudRegistry';
 import { useAuth } from './context/AuthContext';
 import { 
   getOrCreateOneToOneRoom, 
@@ -90,15 +91,15 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser?.uid, currentUser?.id]);
 
-  // Merge real-time Firestore rooms with local contacts
+  // Merge real-time Firestore rooms with local contacts without duplicates
   const mergedContacts = React.useMemo(() => {
     if (!firestoreRooms || firestoreRooms.length === 0) {
-      return contacts.map((c) => (c.id === activeContactId ? { ...c, unreadCount: 0 } : c));
+      return contacts.map((c) => (matchesContact(c, activeContactId) ? { ...c, unreadCount: 0 } : c));
     }
 
     const roomContacts = firestoreRooms.map((r) => {
       if (r.type === 'group') {
-        const existing = contacts.find((c) => c.id === r.id);
+        const existing = contacts.find((c) => matchesContact(c, r.id));
         return {
           id: r.id,
           roomId: r.id,
@@ -108,9 +109,9 @@ export default function App() {
           about: 'Group Chat',
           isOnline: false,
           lastSeen: 'Group',
-          lastMessage: r.lastMessage || '',
-          lastMessageTimestamp: r.lastMessageTimestamp,
-          unreadCount: activeContactId === r.id ? 0 : (existing?.unreadCount || 0),
+          lastMessage: r.lastMessage || existing?.lastMessage || '',
+          lastMessageTimestamp: r.lastMessageTimestamp || existing?.lastMessageTimestamp,
+          unreadCount: (activeContactId && matchesContact(r, activeContactId)) ? 0 : (existing?.unreadCount || 0),
           messages: existing?.messages || []
         };
       }
@@ -118,7 +119,11 @@ export default function App() {
       // 1-to-1 room
       const otherUid = r.participants?.find((uid) => uid !== currentUser?.uid);
       const otherProfile = r.participantProfiles?.[otherUid] || {};
-      const existing = contacts.find((c) => c.id === r.id || (otherUid && c.otherUid === otherUid));
+      const existing = contacts.find((c) => 
+        matchesContact(c, r.id) || 
+        (otherUid && matchesContact(c, otherUid)) ||
+        (otherProfile.username && matchesContact(c, otherProfile.username))
+      );
 
       return {
         id: r.id,
@@ -130,17 +135,17 @@ export default function App() {
         about: otherProfile.about || existing?.about || 'Connected on Chatz',
         isOnline: true,
         lastSeen: 'Online',
-        lastMessage: r.lastMessage || '',
-        lastMessageTimestamp: r.lastMessageTimestamp,
-        unreadCount: activeContactId === r.id ? 0 : (existing?.unreadCount || 0),
+        lastMessage: r.lastMessage || existing?.lastMessage || '',
+        lastMessageTimestamp: r.lastMessageTimestamp || existing?.lastMessageTimestamp,
+        unreadCount: (activeContactId && matchesContact(r, activeContactId)) ? 0 : (existing?.unreadCount || 0),
         messages: existing?.messages || []
       };
     });
 
-    const roomIds = new Set(roomContacts.map((c) => c.id));
+    // Strictly eliminate any contact that matches an existing Firestore room
     const nonRoomContacts = contacts
-      .filter((c) => !roomIds.has(c.id))
-      .map((c) => (c.id === activeContactId ? { ...c, unreadCount: 0 } : c));
+      .filter((c) => !roomContacts.some((rc) => matchesContact(c, rc)))
+      .map((c) => (matchesContact(c, activeContactId) ? { ...c, unreadCount: 0 } : c));
 
     return [...roomContacts, ...nonRoomContacts];
   }, [firestoreRooms, contacts, currentUser?.uid, activeContactId]);
@@ -149,7 +154,7 @@ export default function App() {
   useEffect(() => {
     if (!activeContactId) return;
 
-    const target = mergedContacts.find((c) => c.id === activeContactId);
+    const target = mergedContacts.find((c) => matchesContact(c, activeContactId));
     const roomId = target?.roomId || (activeContactId.startsWith('room_') ? activeContactId : null);
 
     if (!roomId) return;
@@ -162,11 +167,30 @@ export default function App() {
       roomId,
       (firestoreMessages) => {
         setContacts((prev) => {
-          const exists = prev.some((c) => c.id === activeContactId);
+          const exists = prev.some((c) => matchesContact(c, activeContactId) || matchesContact(c, roomId));
           if (exists) {
-            return prev.map((c) => (c.id === activeContactId ? { ...c, messages: firestoreMessages, unreadCount: 0 } : c));
+            return prev.map((c) => {
+              if (matchesContact(c, activeContactId) || matchesContact(c, roomId)) {
+                // Merge firestore messages + preserve any optimistic pending sent messages in-flight
+                const fsIds = new Set(firestoreMessages.map((m) => m.id));
+                const pendingLocal = (c.messages || []).filter(
+                  (m) => !fsIds.has(m.id) && m.status === 'sent' && (Date.now() - (m.timestamp || 0) < 15000) &&
+                         !firestoreMessages.some((fm) => fm.text && fm.text === m.text)
+                );
+                const all = [...firestoreMessages, ...pendingLocal];
+                all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                return {
+                  ...c,
+                  roomId: roomId,
+                  messages: all,
+                  unreadCount: 0
+                };
+              }
+              return c;
+            });
           } else if (target) {
-            return [{ ...target, messages: firestoreMessages, unreadCount: 0 }, ...prev];
+            return [{ ...target, roomId: roomId, messages: firestoreMessages, unreadCount: 0 }, ...prev];
           }
           return prev;
         });
@@ -202,18 +226,22 @@ export default function App() {
     setActiveContactId(id);
     setShowMobileChat(true);
 
-    // Clear unread count for this contact immediately and mark messages as read
+    const targetContact = mergedContacts.find((c) => matchesContact(c, id));
+    const targetRoomId = targetContact?.roomId || (id.startsWith('room_') ? id : null);
+
+    // Clear unread count for this contact immediately and mark incoming messages as read
     setContacts((prev) => {
       const updated = prev.map((c) => {
-        if (c.id === id || c.roomId === id) {
+        if (matchesContact(c, id) || (targetRoomId && matchesContact(c, targetRoomId))) {
           return {
             ...c,
             unreadCount: 0,
-            messages: (c.messages || []).map((m) =>
-              m.senderId !== (currentUser?.uid || currentUser?.id || 'user')
-                ? { ...m, status: 'read' }
-                : m
-            )
+            messages: (c.messages || []).map((m) => {
+              const isMine = m.senderId === 'user' || 
+                m.senderId === (currentUser?.uid || currentUser?.id) ||
+                (currentUser?.username && (m.senderId === currentUser.username || m.senderId === `wa_user_${currentUser.username}`));
+              return isMine ? m : { ...m, status: 'read' };
+            })
           };
         }
         return c;
@@ -223,7 +251,6 @@ export default function App() {
     });
 
     // Mark messages as read in Firestore if roomId
-    const targetRoomId = id.startsWith('room_') ? id : mergedContacts.find((c) => c.id === id)?.roomId;
     if (targetRoomId && currentUser?.uid) {
       markFirestoreRoomMessagesAsRead(targetRoomId, currentUser.uid);
     }
@@ -233,16 +260,19 @@ export default function App() {
       window.history.pushState({ waView: 'chat', contactId: id }, '');
     }
 
-    // Auto-connect to partner peer over P2P Internet immediately
-    const targetContact = contacts.find((c) => c.id === id);
+    // Auto-connect to partner peer over P2P Internet immediately and notify of read state
     const targetIdentifier = targetContact?.username || (id?.startsWith('wa_user_') ? id.replace('wa_user_', '') : targetContact?.phone);
-    if (targetIdentifier && p2pRef.current) {
-      p2pRef.current.connectToPartner(targetIdentifier);
-      p2pRef.current.sendData({
+    if (targetIdentifier) {
+      const readSignal = {
         type: 'P2P_READ',
         readerId: currentUser?.uid || currentUser?.id,
         readerUsername: currentUser?.username
-      }, `wa_user_${targetIdentifier}`);
+      };
+      if (p2pRef.current) {
+        p2pRef.current.connectToPartner(targetIdentifier);
+        p2pRef.current.sendData(readSignal, `wa_user_${targetIdentifier}`);
+      }
+      sendCloudInboxMessage(targetIdentifier, readSignal);
     }
   };
 
@@ -325,87 +355,199 @@ export default function App() {
     }
   }, [settings.theme]);
 
+  // Handle incoming Chat Message from any transport (MQTT Cloud Relay or WebRTC P2P)
+  const handleIncomingChatMessage = (payload, sourcePeerId = null) => {
+    if (!payload?.message) return;
+
+    const senderUsername = payload.senderUsername;
+    const senderPeerId = sourcePeerId || payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
+    const incomingMsg = {
+      ...payload.message,
+      senderId: payload.senderId || senderPeerId,
+      senderUsername: senderUsername || null
+    };
+
+    if (senderUsername) {
+      registerUsername(senderUsername, {
+        id: senderPeerId,
+        username: senderUsername,
+        name: payload.senderName || senderUsername,
+        avatar: payload.senderAvatar || AVATAR_PRESETS[0]
+      });
+    }
+
+    setContacts((prev) => {
+      const partner = prev.find((c) => 
+        matchesContact(c, senderPeerId) || 
+        (senderUsername && matchesContact(c, senderUsername))
+      );
+
+      const isCurrentlyActive = Boolean(
+        activeContactId && (
+          matchesContact({ id: activeContactId }, senderPeerId) ||
+          (senderUsername && matchesContact({ id: activeContactId }, senderUsername)) ||
+          (partner && matchesContact(partner, activeContactId))
+        )
+      );
+
+      incomingMsg.status = isCurrentlyActive ? 'read' : 'delivered';
+
+      const previewText = incomingMsg.text 
+        || (incomingMsg.type === 'image' ? '📷 Photo' : null)
+        || (incomingMsg.type === 'voice' ? '🎤 Voice message' : null)
+        || (incomingMsg.type === 'document' ? `📄 ${incomingMsg.fileName || 'Document'}` : null)
+        || 'Sent a message';
+
+      if (partner) {
+        // Prevent duplicate messages by id or text+time
+        const isDuplicate = partner.messages?.some(
+          (m) => m.id === incomingMsg.id || 
+                 (m.text && m.text === incomingMsg.text && Math.abs((m.timestamp || 0) - (incomingMsg.timestamp || 0)) < 4000)
+        );
+        if (isDuplicate) {
+          return prev;
+        }
+
+        const updated = prev.map((c) =>
+          c.id === partner.id
+            ? {
+                ...c,
+                username: c.username || senderUsername,
+                messages: [...(c.messages || []), incomingMsg],
+                unreadCount: isCurrentlyActive ? 0 : ((c.unreadCount || 0) + 1),
+                lastMessage: previewText,
+                lastMessageTimestamp: incomingMsg.timestamp || Date.now(),
+                isOnline: true,
+                lastSeen: 'Online'
+              }
+            : c
+        );
+        saveStoredContacts(updated);
+        return updated;
+      } else {
+        const newPartner = {
+          id: senderPeerId,
+          username: senderUsername || null,
+          name: payload.senderName || senderUsername || 'Friend',
+          avatar: payload.senderAvatar || AVATAR_PRESETS[0],
+          about: 'Connected on Chatz',
+          isOnline: true,
+          lastSeen: 'Online',
+          unreadCount: isCurrentlyActive ? 0 : 1,
+          lastMessage: previewText,
+          lastMessageTimestamp: incomingMsg.timestamp || Date.now(),
+          messages: [incomingMsg]
+        };
+        const updated = [newPartner, ...prev];
+        saveStoredContacts(updated);
+        return updated;
+      }
+    });
+
+    sounds.playMessageReceived();
+
+    // Acknowledge delivery or read state back to sender
+    const isNowActive = Boolean(
+      activeContactId && (
+        matchesContact({ id: activeContactId }, senderPeerId) ||
+        (senderUsername && matchesContact({ id: activeContactId }, senderUsername))
+      )
+    );
+
+    if (payload.message?.id) {
+      const ackPayload = {
+        type: isNowActive ? 'P2P_READ' : 'P2P_DELIVERED',
+        messageId: payload.message.id,
+        readerId: currentUser?.uid || currentUser?.id,
+        readerUsername: currentUser?.username
+      };
+      if (senderUsername) {
+        sendCloudInboxMessage(senderUsername, ackPayload);
+      }
+      p2pRef.current?.sendData(ackPayload, senderPeerId);
+    }
+  };
+
+  // Handle Delivery Receipt (double grey ticks)
+  const handleDeliveryReceipt = (messageId) => {
+    if (!messageId) return;
+    setContacts((prev) => {
+      const updated = prev.map((c) => ({
+        ...c,
+        messages: (c.messages || []).map((m) =>
+          m.id === messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
+        )
+      }));
+      saveStoredContacts(updated);
+      return updated;
+    });
+  };
+
+  // Handle Read Receipt (double blue ticks)
+  const handleReadReceipt = (readerIdentifier) => {
+    if (!readerIdentifier) return;
+    setContacts((prev) => {
+      const updated = prev.map((c) => {
+        if (matchesContact(c, readerIdentifier)) {
+          return {
+            ...c,
+            messages: (c.messages || []).map((m) => {
+              const isMine = m.senderId === 'user' || 
+                m.senderId === (currentUser?.uid || currentUser?.id) ||
+                (currentUser?.username && (m.senderId === currentUser.username || m.senderId === `wa_user_${currentUser.username}`));
+              return isMine ? { ...m, status: 'read' } : m;
+            })
+          };
+        }
+        return c;
+      });
+      saveStoredContacts(updated);
+      return updated;
+    });
+  };
+
   // Global Cloud Directory Sync & Offline Inbox Delivery
   useEffect(() => {
-    // Initial fetch of all global registered users
     fetchCloudUsers();
 
-    if (!currentUser?.username) return;
+    if (!currentUser) return;
 
-    // Publish current user to cloud directory so everyone can find them
-    publishUserToCloud(currentUser);
+    if (currentUser.username) {
+      publishUserToCloud(currentUser);
+    }
 
-    // Incoming cloud messages delivery handler
     const handleInboxMessages = (inboxMsgs) => {
       if (!Array.isArray(inboxMsgs) || inboxMsgs.length === 0) return;
 
       inboxMsgs.forEach((payload) => {
-        if (payload?.type === 'CHAT_MESSAGE' && payload.message) {
-          const senderUsername = payload.senderUsername;
-          const senderPeerId = payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
-          const incomingMsg = {
-            ...payload.message,
-            senderId: senderPeerId
-          };
-
-          setContacts((prev) => {
-            const partner = prev.find((c) => c.id === senderPeerId || (senderUsername && c.username === senderUsername));
-            const isCurrentlyActive = activeContactId === senderPeerId || (partner && activeContactId === partner.id);
-            if (isCurrentlyActive) {
-              incomingMsg.status = 'read';
-            }
-
-            if (partner) {
-              if (partner.messages?.some((m) => m.id === incomingMsg.id)) {
-                return prev;
-              }
-              const updated = prev.map((c) =>
-                c.id === partner.id
-                  ? {
-                      ...c,
-                      messages: [...(c.messages || []), incomingMsg],
-                      unreadCount: isCurrentlyActive ? 0 : ((c.unreadCount || 0) + 1),
-                      isOnline: true,
-                      lastSeen: 'Online'
-                    }
-                  : c
-              );
-              saveStoredContacts(updated);
-              return updated;
-            } else {
-              const newPartner = {
-                id: senderPeerId,
-                username: senderUsername || null,
-                isPartner: true,
-                name: payload.senderName || senderUsername || 'Friend',
-                avatar: payload.senderAvatar || AVATAR_PRESETS[0],
-                about: 'Connected on Chatz',
-                isOnline: true,
-                lastSeen: 'Online',
-                unreadCount: isCurrentlyActive ? 0 : 1,
-                messages: [incomingMsg]
-              };
-              const updated = [newPartner, ...prev];
-              saveStoredContacts(updated);
-              return updated;
-            }
-          });
-          sounds.playMessageReceived();
+        if (!payload) return;
+        if (payload.type === 'CHAT_MESSAGE') {
+          handleIncomingChatMessage(payload);
+        } else if (payload.type === 'P2P_DELIVERED') {
+          handleDeliveryReceipt(payload.messageId);
+        } else if (payload.type === 'P2P_READ') {
+          handleReadReceipt(payload.readerUsername || payload.readerId);
         }
       });
     };
 
-    // Immediate check
-    pollCloudInbox(currentUser.username, handleInboxMessages);
+    // Listen on user channels (both username and uid)
+    const userChannels = [
+      currentUser.username,
+      currentUser.uid,
+      currentUser.email ? currentUser.email.split('@')[0] : null
+    ].filter(Boolean);
 
-    // Poll every 6 seconds
+    pollCloudInbox(userChannels, handleInboxMessages);
+
+    // Poll every 6 seconds for discovery
     const interval = setInterval(() => {
       fetchCloudUsers();
-      pollCloudInbox(currentUser.username, handleInboxMessages);
+      pollCloudInbox(userChannels, handleInboxMessages);
     }, 6000);
 
     return () => clearInterval(interval);
-  }, [currentUser?.username]);
+  }, [currentUser?.username, currentUser?.uid]);
 
   // Initialize Online P2P Internet Connection when logged in
   useEffect(() => {
@@ -505,103 +647,11 @@ export default function App() {
         }
 
         if (payload?.type === 'CHAT_MESSAGE') {
-          const senderUsername = payload.senderUsername;
-          const senderPeerId = peerId || payload.senderId || (senderUsername ? `wa_user_${senderUsername}` : 'partner_live');
-          if (senderUsername) {
-            registerUsername(senderUsername, {
-              id: senderPeerId,
-              username: senderUsername,
-              name: payload.senderName || senderUsername,
-              avatar: payload.senderAvatar || AVATAR_PRESETS[0]
-            });
-          }
-
-          const partner = contacts.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
-          const targetId = partner ? partner.id : senderPeerId;
-          const isCurrentlyActive = activeContactId === targetId || activeContactId === senderPeerId || (partner && activeContactId === partner.id);
-
-          const incomingMsg = {
-            ...payload.message,
-            id: 'p2p_' + Date.now(),
-            senderId: targetId,
-            status: isCurrentlyActive ? 'read' : 'delivered'
-          };
-
-          setContacts((prev) => {
-            const existingPartner = prev.find((c) => c.isPartner || c.id === senderPeerId || (senderUsername && c.username === senderUsername));
-            if (existingPartner) {
-              const updated = prev.map((c) => {
-                if (c.id === existingPartner.id) {
-                  return {
-                    ...c,
-                    messages: [...(c.messages || []), incomingMsg],
-                    unreadCount: isCurrentlyActive ? 0 : ((c.unreadCount || 0) + 1),
-                    isOnline: true,
-                    lastSeen: 'Online (Live P2P)'
-                  };
-                }
-                return c;
-              });
-              saveStoredContacts(updated);
-              return updated;
-            } else {
-              const newPartner = {
-                id: targetId,
-                username: senderUsername || null,
-                isPartner: true,
-                name: payload.senderName || senderUsername || 'Friend',
-                avatar: payload.senderAvatar || AVATAR_PRESETS[0],
-                about: 'Connected Live on Chatz',
-                isOnline: true,
-                lastSeen: 'Online (Live P2P)',
-                unreadCount: isCurrentlyActive ? 0 : 1,
-                messages: [incomingMsg]
-              };
-              const updated = [newPartner, ...prev];
-              saveStoredContacts(updated);
-              return updated;
-            }
-          });
-          sounds.playMessageReceived();
-
-          // Acknowledge delivery over P2P
-          if (payload.message?.id) {
-            p2pRef.current?.sendData({
-              type: isCurrentlyActive ? 'P2P_READ' : 'P2P_DELIVERED',
-              messageId: payload.message.id,
-              readerId: currentUser?.uid || currentUser?.id,
-              readerUsername: currentUser?.username
-            }, senderPeerId);
-          }
+          handleIncomingChatMessage(payload, peerId);
         } else if (payload?.type === 'P2P_DELIVERED') {
-          // Double grey tick delivery update
-          setContacts((prev) => {
-            const updated = prev.map((c) => ({
-              ...c,
-              messages: (c.messages || []).map((m) =>
-                m.id === payload.messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
-              )
-            }));
-            saveStoredContacts(updated);
-            return updated;
-          });
+          handleDeliveryReceipt(payload.messageId);
         } else if (payload?.type === 'P2P_READ') {
-          // Double blue ticks seen update
-          setContacts((prev) => {
-            const updated = prev.map((c) => {
-              if (c.id === peerId || (payload.readerUsername && c.username === payload.readerUsername)) {
-                return {
-                  ...c,
-                  messages: (c.messages || []).map((m) =>
-                    m.senderId === (currentUser?.uid || currentUser?.id || 'user') ? { ...m, status: 'read' } : m
-                  )
-                };
-              }
-              return c;
-            });
-            saveStoredContacts(updated);
-            return updated;
-          });
+          handleReadReceipt(payload.readerUsername || payload.readerId || peerId);
         }
       },
       onIncomingCall: (mediaCall) => {
@@ -797,76 +847,133 @@ export default function App() {
     return null;
   };
 
-  // Send Message with Firestore real-time sync + WhatsApp realistic tick progression
+  // Send Message with Firestore real-time sync + Real-Time MQTT Relay + WebRTC P2P + Instant 0ms Optimistic UI
   const handleSendMessage = async (msgData) => {
     if (!activeContactId) return;
 
-    const targetContact = mergedContacts.find((c) => c.id === activeContactId);
+    const targetContact = mergedContacts.find((c) => matchesContact(c, activeContactId));
     const roomId = targetContact?.roomId || (activeContactId.startsWith('room_') ? activeContactId : null);
 
-    // 1. If active chat is a Firestore room, dispatch directly to Firestore!
-    if (roomId && currentUser?.uid) {
-      try {
-        await sendFirestoreMessage(roomId, currentUser, msgData);
-        sounds.playMessageSent();
-        return;
-      } catch (err) {
-        console.warn('Firestore message dispatch notice (falling back):', err);
-      }
-    }
+    const messageId = 'm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTs = Date.now();
 
-    const messageId = 'm_' + Date.now();
     const newMsg = {
       id: messageId,
       senderId: currentUser?.uid || currentUser?.id || 'user',
+      senderUsername: currentUser?.username || '',
+      senderName: currentUser?.displayName || currentUser?.name || 'You',
+      senderAvatar: currentUser?.photoURL || currentUser?.avatar || '',
       ...msgData,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timestamp: Date.now(),
+      time: nowTime,
+      timestamp: nowTs,
       status: 'sent' // 1. Starts with Single Grey Tick!
     };
 
+    // 1. Play sent audio effect immediately
     sounds.playMessageSent();
 
+    // 2. Immediate optimistic update to local UI (0ms delay for sender!)
+    const previewText = msgData.text 
+      || (msgData.type === 'image' ? '📷 Photo' : null)
+      || (msgData.type === 'voice' ? '🎤 Voice message' : null)
+      || (msgData.type === 'document' ? `📄 ${msgData.fileName || 'Document'}` : null)
+      || 'Sent a message';
+
     setContacts((prev) => {
-      const updated = prev.map((c) => {
-        if (c.id === activeContactId) {
-          return {
-            ...c,
-            messages: [...(c.messages || []), newMsg]
-          };
-        }
-        return c;
-      });
+      const exists = prev.some((c) => matchesContact(c, activeContactId) || (roomId && matchesContact(c, roomId)));
+      let updated;
+      if (exists) {
+        updated = prev.map((c) => {
+          if (matchesContact(c, activeContactId) || (roomId && matchesContact(c, roomId))) {
+            return {
+              ...c,
+              messages: [...(c.messages || []), newMsg],
+              lastMessage: previewText,
+              lastMessageTimestamp: nowTs,
+              unreadCount: 0
+            };
+          }
+          return c;
+        });
+      } else if (targetContact) {
+        const newEntry = {
+          ...targetContact,
+          messages: [newMsg],
+          lastMessage: previewText,
+          lastMessageTimestamp: nowTs,
+          unreadCount: 0
+        };
+        updated = [newEntry, ...prev];
+      } else {
+        updated = prev;
+      }
       saveStoredContacts(updated);
       return updated;
     });
 
-    // Send over BroadcastChannel (local tabs)
+    // 3. Broadcast to other local browser tabs
     broadcastChange('NEW_MESSAGE', { contactId: activeContactId, message: newMsg });
 
-    // Target peer ID for this specific contact
-    const targetPeerId = targetContact?.username 
-      ? `wa_user_${targetContact.username}` 
-      : (activeContactId.startsWith('wa_user_') ? activeContactId : targetContact?.phone);
+    // 4. Send to Firestore in the background if active chat has a room (WITHOUT early returning!)
+    if (roomId && currentUser?.uid) {
+      sendFirestoreMessage(roomId, currentUser, msgData)
+        .then((savedMsg) => {
+          if (savedMsg?.id) {
+            setContacts((prev) => {
+              const updated = prev.map((c) => {
+                if (matchesContact(c, activeContactId) || matchesContact(c, roomId)) {
+                  return {
+                    ...c,
+                    messages: (c.messages || []).map((m) => (m.id === messageId ? { ...m, id: savedMsg.id } : m))
+                  };
+                }
+                return c;
+              });
+              saveStoredContacts(updated);
+              return updated;
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn('Firestore message dispatch notice (falling back):', err);
+        });
+    }
 
-    // Send over Internet P2P & MQTT directly to recipient's phone if connected!
-    p2pRef.current?.sendData({
+    // 5. Target identifiers for Real-Time MQTT Relay & WebRTC P2P
+    const targetUsername = targetContact?.username || 
+      (targetContact?.id?.startsWith('wa_user_') ? targetContact.id.replace('wa_user_', '') : null) ||
+      (targetContact?.otherUid ? targetContact.otherUid : null);
+
+    const wirePayload = {
       type: 'CHAT_MESSAGE',
       message: newMsg,
-      senderId: currentUser?.username ? `wa_user_${currentUser.username}` : currentUser?.id,
+      senderId: currentUser?.uid || (currentUser?.username ? `wa_user_${currentUser.username}` : 'user'),
       senderUsername: currentUser?.username || null,
       senderName: currentUser?.displayName || currentUser?.name || 'Friend',
       senderAvatar: currentUser?.photoURL || currentUser?.avatar || null
-    }, targetPeerId);
+    };
 
-    // 2. Progression: Transition from 'sent' to 'delivered' (double grey tick) after network ping (600ms)
+    // 6. Send over Real-Time MQTT Cloud Relay (works over 4G/5G mobile data, WiFi, hotspots!)
+    if (targetUsername) {
+      sendCloudInboxMessage(targetUsername, wirePayload);
+    }
+    if (targetContact?.otherUid && targetContact.otherUid !== targetUsername) {
+      sendCloudInboxMessage(targetContact.otherUid, wirePayload);
+    }
+
+    // 7. Send over WebRTC P2P (direct peer connection)
+    const targetPeerId = targetUsername ? `wa_user_${targetUsername}` : activeContactId;
+    p2pRef.current?.sendData(wirePayload, targetPeerId);
+
+    // 8. Single grey tick to double grey tick progression fallback (600ms)
     setTimeout(() => {
       setContacts((prev) => {
         const updated = prev.map((c) => {
-          if (c.id === activeContactId) {
+          if (matchesContact(c, activeContactId) || (roomId && matchesContact(c, roomId))) {
             return {
               ...c,
-              messages: (c.messages || []).map((m) => 
+              messages: (c.messages || []).map((m) =>
                 m.id === messageId && m.status === 'sent' ? { ...m, status: 'delivered' } : m
               )
             };
