@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lock, ArrowRight, ArrowLeft, Check, ShieldCheck, 
   AlertCircle, RefreshCw, Mail, User, Info, AtSign,
-  Camera, CheckCircle2, Send, Eye, EyeOff, KeyRound, UserCheck, Sparkles
+  Camera, CheckCircle2, Send, Eye, EyeOff, KeyRound, UserCheck
 } from 'lucide-react';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
@@ -190,9 +190,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
     // If incorrect
     setLoading(false);
     if (verification.reason === 'wrong_password') {
-      setErrorMsg('Incorrect password. Please try again (Demo password: password123 or 123456).');
+      setErrorMsg('Incorrect password. Please try again.');
     } else {
-      setErrorMsg(`No account found for "${cleanId}". Use a 1-click test account below or sign up with Gmail OTP.`);
+      setErrorMsg(`No account found for "${cleanId}". Please sign up with Gmail OTP.`);
     }
   };
 
@@ -568,61 +568,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
               </button>
             </div>
 
-            {/* Quick 1-Click Instant Demo Login Banner */}
-            <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(0,168,132,0.1)', borderRadius: 8, border: '1px solid rgba(0,168,132,0.25)', textAlign: 'left' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wa-green-light)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Sparkles size={14} />
-                <span>⚡ Instant 1-Click Test Login:</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  id="quickDemoSonuBtn"
-                  onClick={() => handleQuickDemoLogin('sonu')}
-                  style={{
-                    flex: '1 1 auto',
-                    padding: '7px 12px',
-                    borderRadius: 6,
-                    border: '1px solid var(--wa-green)',
-                    background: 'rgba(0,168,132,0.2)',
-                    color: '#ffffff',
-                    fontSize: '12.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6
-                  }}
-                  title="Instant login as Sonu Kumar"
-                >
-                  <span>👨 Sonu Kumar (@sonu)</span>
-                </button>
-                <button
-                  type="button"
-                  id="quickDemoRahulBtn"
-                  onClick={() => handleQuickDemoLogin('rahul')}
-                  style={{
-                    flex: '1 1 auto',
-                    padding: '7px 12px',
-                    borderRadius: 6,
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: '#ffffff',
-                    fontSize: '12.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6
-                  }}
-                  title="Instant login as Rahul Sharma"
-                >
-                  <span>👦 Rahul (@rahul)</span>
-                </button>
-              </div>
-            </div>
 
             {/* Login Form */}
             <form onSubmit={handlePasswordLogin}>
@@ -664,7 +609,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
                     type={showLoginPassword ? 'text' : 'password'}
                     className="wa-phone-number-field"
                     style={{ width: '100%', paddingRight: 40, fontSize: '14.5px' }}
-                    placeholder="Enter your password (or demo: 123456)"
+                    placeholder="Enter your password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
@@ -677,9 +622,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
                   >
                     {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
-                </div>
-                <div style={{ fontSize: '11.5px', color: 'var(--wa-text-muted)', marginTop: 5 }}>
-                  💡 Test credentials: username <strong>sonu</strong> | password <strong>123456</strong>
                 </div>
               </div>
 

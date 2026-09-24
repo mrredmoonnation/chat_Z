@@ -750,10 +750,7 @@ export default function Sidebar({
                         </div>
                         <div className="wa-global-user-info">
                           <div className="wa-global-user-name">@{cleanQ}</div>
-                          <div className="wa-global-user-handle" style={{ color: 'var(--wa-green-light)', fontWeight: 500 }}>
-                            ⚡ Connect Live over Internet
-                          </div>
-                          <div className="wa-global-user-about">Press Enter or click Chat to begin</div>
+                          <div className="wa-global-user-about">Tap Chat to start a conversation</div>
                         </div>
                         <button 
                           type="button" 
@@ -938,8 +935,8 @@ export default function Sidebar({
                       </div>
                       <div className="wa-global-user-info" style={{ flex: 1 }}>
                         <div className="wa-global-user-name" style={{ fontSize: '13.5px' }}>Start new chat with @{cleanQ}</div>
-                        <div className="wa-global-user-handle" style={{ color: 'var(--wa-green-light)', fontSize: '12px' }}>
-                          ⚡ Connect Live over Internet P2P
+                        <div className="wa-global-user-handle" style={{ color: 'var(--wa-text-secondary)', fontSize: '12px' }}>
+                          Start a new conversation
                         </div>
                       </div>
                       <button 
@@ -1380,7 +1377,7 @@ export default function Sidebar({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '14.5px', color: 'var(--wa-text-primary)' }}>@{cleanModalQ}</div>
                     <div style={{ fontSize: '12px', color: 'var(--wa-green-light)', fontWeight: 500 }}>
-                      ⚡ Connect Live on Internet P2P
+                      Start a new conversation
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--wa-text-secondary)' }}>
                       Press Enter or click Chat to begin conversation
