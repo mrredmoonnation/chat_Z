@@ -18,6 +18,10 @@ export default function CallModal({
   const remoteVideoRef = useRef(null);
   const webrtcRef = useRef(null);
   const timerIntervalRef = useRef(null);
+  const statusRef = useRef('connecting'); // Ref to avoid stale closure in timeouts
+
+  // Keep statusRef in sync with status state
+  useEffect(() => { statusRef.current = status; }, [status]);
 
   // Initialize and handle call state transitions
   useEffect(() => {
@@ -43,7 +47,7 @@ export default function CallModal({
 
     // 45 seconds timeout if receiver doesn't answer
     const ringTimeout = setTimeout(() => {
-      if (status === 'ringing') {
+      if (statusRef.current === 'ringing') {
         handleEnd();
       }
     }, 45000);

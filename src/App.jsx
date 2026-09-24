@@ -3,7 +3,7 @@ import {
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
   broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, 
-  matchesContact, AVATAR_PRESETS
+  matchesContact, AVATAR_PRESETS, isValidUsernameFormat
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
@@ -1274,8 +1274,15 @@ export default function App() {
 
   // Incoming Call Signals Handlers
   const handleIncomingCallSignal = (payload) => {
-    if (!payload?.contact) return;
-    console.log('Incoming call signal received from:', payload.contact);
+    // Be lenient: allow missing contact, build a fallback from what we have
+    if (!payload) return;
+    const incomingContact = payload.contact || {
+      id: payload.callerId || payload.senderId || 'caller',
+      name: payload.callerName || payload.senderName || payload.callerUsername || 'Incoming Call',
+      avatar: payload.callerAvatar || payload.senderAvatar || AVATAR_PRESETS[0],
+      username: payload.callerUsername || payload.senderUsername || null
+    };
+    console.log('📞 Incoming call signal received from:', incomingContact);
     sounds.init();
     sounds.startIncomingRingtone();
     if (navigator.vibrate) {
@@ -1285,7 +1292,7 @@ export default function App() {
       isOpen: true,
       isIncoming: true,
       isAccepted: false,
-      contact: payload.contact,
+      contact: incomingContact,
       isVideo: !!payload.isVideo
     });
   };
@@ -1319,29 +1326,42 @@ export default function App() {
     });
     broadcastChange('START_CALL', { contact: currentUser, isVideo });
 
-    // Send instant call notification to partner across all their aliases
-    const targets = resolveTargetChannels(contact);
-    console.log('Sending call notification to channels:', targets);
+    // Caller's own identity for recipient to call back
+    const callerInfo = {
+      id: currentUser?.uid || currentUser?.id || `wa_user_${currentUser?.username}`,
+      username: currentUser?.username || null,
+      name: currentUser?.displayName || currentUser?.name || currentUser?.username || 'User',
+      avatar: currentUser?.photoURL || currentUser?.avatar || AVATAR_PRESETS[0],
+      phone: currentUser?.phone || ''
+    };
 
     const callPayload = {
       type: 'START_CALL',
-      contact: {
-        id: currentUser.id || `wa_user_${currentUser.username}`,
-        username: currentUser.username,
-        name: currentUser.name || currentUser.displayName || currentUser.username,
-        avatar: currentUser.avatar || currentUser.photoURL,
-        phone: currentUser.phone || ''
-      },
+      contact: callerInfo,
+      callerUsername: callerInfo.username,
+      callerName: callerInfo.name,
+      callerAvatar: callerInfo.avatar,
+      callerId: callerInfo.id,
       isVideo
     };
 
-    targets.forEach((target) => {
-      sendCloudInboxMessage(target, callPayload);
-    });
+    // Send instant call notification to partner across all their aliases
+    const targets = resolveTargetChannels(contact);
+    console.log('📞 Sending call notification to channels:', targets);
 
-    // Also send via direct PeerJS DataConnection
-    const peerTarget = targets[0] || contact.username || contact.id;
-    if (peerTarget) {
+    if (targets.length === 0) {
+      // Fallback: try contact.username, contact.id directly
+      const fallback = contact.username || contact.otherUid || (contact.id?.replace('wa_user_', ''));
+      if (fallback) {
+        sendCloudInboxMessage(fallback, callPayload);
+        p2pRef.current?.sendData(callPayload, `wa_user_${cleanUsername(fallback)}`);
+      }
+    } else {
+      targets.forEach((target) => {
+        sendCloudInboxMessage(target, callPayload);
+      });
+      // Also send via direct PeerJS DataConnection to first target
+      const peerTarget = targets[0];
       p2pRef.current?.sendData(callPayload, `wa_user_${cleanUsername(peerTarget)}`);
     }
   };
