@@ -25,6 +25,17 @@ import {
  * -------------------------------------------------------------
  */
 
+// Strict timeout helper to prevent hanging if Firestore database is uninitialized, missing, or offline
+const withFirestoreTimeout = (promise, ms = 1500) => {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Firestore timeout')), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+};
+
 // Fetch user profile from Firestore Users collection
 export const getFirestoreUserProfile = async (uid) => {
   if (!uid) return null;
@@ -33,13 +44,13 @@ export const getFirestoreUserProfile = async (uid) => {
 
   try {
     const userDocRef = doc(db, 'Users', uid);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
+    const snap = await withFirestoreTimeout(getDoc(userDocRef), 1200);
+    if (snap && snap.exists()) {
       return snap.data();
     }
     return null;
   } catch (err) {
-    console.warn('Error fetching Firestore user profile:', err);
+    // Graceful fallback when Firestore is offline or database isn't provisioned yet
     return null;
   }
 };
@@ -65,11 +76,11 @@ export const saveFirestoreUserProfile = async (profile) => {
 
   try {
     const userDocRef = doc(db, 'Users', profile.uid);
-    await setDoc(userDocRef, data, { merge: true });
+    await withFirestoreTimeout(setDoc(userDocRef, data, { merge: true }), 1500);
     return data;
   } catch (err) {
-    console.error('Error saving Firestore user profile:', err);
-    throw err;
+    // Return local data even if remote save failed/timed out
+    return data;
   }
 };
 
@@ -247,7 +258,9 @@ export const subscribeToUserRooms = (currentUid, onRoomsUpdate, onError) => {
         onRoomsUpdate && onRoomsUpdate(rooms);
       },
       (err) => {
-        console.warn('Error in subscribeToUserRooms snapshot:', err);
+        if (!err?.message?.includes('Database') && !err?.message?.includes('offline')) {
+          console.warn('Error in subscribeToUserRooms snapshot:', err);
+        }
         onError && onError(err);
       }
     );

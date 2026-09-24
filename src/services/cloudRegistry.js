@@ -147,8 +147,8 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         isConnected = false;
         console.warn('Realtime Cloud connection failed, retrying in 4s:', err);
         setTimeout(() => {
-          if (currentSubscribedUser) {
-            initRealtimeCloud(currentSubscribedUser);
+          if (currentSubscribedUsers && currentSubscribedUsers.size > 0) {
+            initRealtimeCloud(Array.from(currentSubscribedUsers));
           }
         }, 4000);
       }

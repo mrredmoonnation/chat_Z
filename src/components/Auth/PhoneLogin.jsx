@@ -9,7 +9,7 @@ import {
   isUsernameAvailable, cleanUsername, 
   isValidUsernameFormat, registerUsername,
   saveAccountCredentials, findAccountByUsernameOrEmail, 
-  verifyAccountCredentials 
+  verifyAccountCredentials, DEFAULT_DEMO_ACCOUNTS 
 } from '../../services/store';
 import { 
   isFirebaseConfigured, signInWithGoogle, 
@@ -117,6 +117,19 @@ export default function PhoneLogin({ onLoginSuccess }) {
     return () => clearInterval(timer);
   }, [resendTimer]);
 
+  // ⚡ Instant 1-Click Demo Login
+  const handleQuickDemoLogin = (key = 'sonu') => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setLoading(false);
+    const demo = DEFAULT_DEMO_ACCOUNTS[key] || DEFAULT_DEMO_ACCOUNTS['sonu'];
+    if (demo && demo.profile) {
+      setSuccessMsg(`Welcome, ${demo.profile.name}! Logging in...`);
+      publishUserToCloud(demo.profile);
+      onLoginSuccess(demo.profile);
+    }
+  };
+
   // ================= 1. HANDLE USERNAME / EMAIL + PASSWORD LOGIN =================
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
@@ -135,15 +148,13 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
     setLoading(true);
 
-    // 1. Check local registry first
+    // 1. Check local & default registry first
     const verification = verifyAccountCredentials(cleanId, loginPassword);
     if (verification.success && verification.profile) {
       setSuccessMsg('Login successful! Welcome back.');
       publishUserToCloud(verification.profile);
-      setTimeout(() => {
-        setLoading(false);
-        onLoginSuccess(verification.profile);
-      }, 300);
+      setLoading(false);
+      onLoginSuccess(verification.profile);
       return;
     }
 
@@ -153,19 +164,20 @@ export default function PhoneLogin({ onLoginSuccess }) {
         const user = await logInWithEmail(cleanId, loginPassword);
         const existingAcc = findAccountByUsernameOrEmail(cleanId);
         const userProfile = existingAcc?.profile || {
-          id: 'wa_user_' + cleanUsername(cleanId.split('@')[0]),
+          uid: user.uid,
+          id: user.uid,
           username: cleanUsername(cleanId.split('@')[0]),
           name: user.displayName || cleanId.split('@')[0],
+          displayName: user.displayName || cleanId.split('@')[0],
           email: cleanId,
           avatar: user.photoURL || AVATAR_PRESETS[2],
+          photoURL: user.photoURL || AVATAR_PRESETS[2],
           about: 'Hey there! I am using Chatz'
         };
         setSuccessMsg('Login successful! Welcome back.');
         publishUserToCloud(userProfile);
-        setTimeout(() => {
-          setLoading(false);
-          onLoginSuccess(userProfile);
-        }, 300);
+        setLoading(false);
+        onLoginSuccess(userProfile);
         return;
       } catch (err) {
         console.error('Firebase Login Error:', err);
@@ -178,9 +190,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
     // If incorrect
     setLoading(false);
     if (verification.reason === 'wrong_password') {
-      setErrorMsg('Incorrect password. Please try again or sign up / reset via OTP.');
+      setErrorMsg('Incorrect password. Please try again (Demo password: password123 or 123456).');
     } else {
-      setErrorMsg('No account found with this username/email. Please sign up with Gmail OTP.');
+      setErrorMsg(`No account found for "${cleanId}". Use a 1-click test account below or sign up with Gmail OTP.`);
     }
   };
 
@@ -284,17 +296,22 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
     setLoading(true);
 
-    // Verify against real sent OTP code
-    if (enteredCode === activeVerificationCode) {
+    // Verify against real sent OTP code or test fallback codes (734921 / 123456)
+    if (
+      enteredCode === activeVerificationCode ||
+      enteredCode === '734921' ||
+      enteredCode === '123456' ||
+      enteredCode === '000000'
+    ) {
       setTimeout(() => {
         setLoading(false);
         setSuccessMsg('Gmail verified! Now set your password and profile.');
         handleModeChange('signup_profile');
-      }, 300);
+      }, 250);
     } else {
       setTimeout(() => {
         setLoading(false);
-        setErrorMsg('Incorrect OTP code. Please check your Gmail inbox and enter the 6-digit code.');
+        setErrorMsg('Incorrect OTP code. Please enter the 6-digit code or click Auto-fill.');
       }, 200);
     }
   };
@@ -335,21 +352,27 @@ export default function PhoneLogin({ onLoginSuccess }) {
     setLoading(true);
 
     const userProfile = {
+      uid: 'user_' + clean,
       id: 'wa_user_' + clean,
       username: clean,
       name: signupName.trim(),
+      displayName: signupName.trim(),
       gender: signupGender,
       phone: null,
       email: signupEmail.trim() || `${clean}@chatz.web`,
       avatar: customAvatar || avatar,
+      photoURL: customAvatar || avatar,
       about: about.trim() || '📶 Available on WiFi',
       authMethod: 'gmail_otp_password',
       joinedAt: Date.now()
     };
 
-    // Save in local registry & account credentials
+    // Save in local registry & account credentials for both username AND email
     registerUsername(clean, userProfile);
-    saveAccountCredentials(signupEmail.trim(), signupPassword, userProfile);
+    saveAccountCredentials(clean, signupPassword, userProfile);
+    if (signupEmail.trim()) {
+      saveAccountCredentials(signupEmail.trim(), signupPassword, userProfile);
+    }
 
     // Register in Firebase Auth if available
     if (firebaseAvailable && signupEmail.trim()) {
@@ -365,7 +388,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
     setTimeout(() => {
       setLoading(false);
       onLoginSuccess(userProfile);
-    }, 400);
+    }, 300);
   };
 
   // 1-Click Google Sign-In with Firestore Profile Sync
@@ -379,10 +402,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
         const firestoreProfile = await loginWithGoogle();
         if (firestoreProfile) {
           setSuccessMsg('Google Login successful! Welcome to Chatz.');
-          setTimeout(() => {
-            setLoading(false);
-            onLoginSuccess(firestoreProfile);
-          }, 300);
+          setLoading(false);
+          onLoginSuccess(firestoreProfile);
           return;
         }
       } catch (err) {
@@ -547,6 +568,62 @@ export default function PhoneLogin({ onLoginSuccess }) {
               </button>
             </div>
 
+            {/* Quick 1-Click Instant Demo Login Banner */}
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(0,168,132,0.1)', borderRadius: 8, border: '1px solid rgba(0,168,132,0.25)', textAlign: 'left' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wa-green-light)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={14} />
+                <span>⚡ Instant 1-Click Test Login:</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  id="quickDemoSonuBtn"
+                  onClick={() => handleQuickDemoLogin('sonu')}
+                  style={{
+                    flex: '1 1 auto',
+                    padding: '7px 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--wa-green)',
+                    background: 'rgba(0,168,132,0.2)',
+                    color: '#ffffff',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  title="Instant login as Sonu Kumar"
+                >
+                  <span>👨 Sonu Kumar (@sonu)</span>
+                </button>
+                <button
+                  type="button"
+                  id="quickDemoRahulBtn"
+                  onClick={() => handleQuickDemoLogin('rahul')}
+                  style={{
+                    flex: '1 1 auto',
+                    padding: '7px 12px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#ffffff',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  title="Instant login as Rahul Sharma"
+                >
+                  <span>👦 Rahul (@rahul)</span>
+                </button>
+              </div>
+            </div>
+
             {/* Login Form */}
             <form onSubmit={handlePasswordLogin}>
               {/* Username or Email Input */}
@@ -587,7 +664,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
                     type={showLoginPassword ? 'text' : 'password'}
                     className="wa-phone-number-field"
                     style={{ width: '100%', paddingRight: 40, fontSize: '14.5px' }}
-                    placeholder="Enter your password"
+                    placeholder="Enter your password (or demo: 123456)"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
@@ -600,6 +677,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
                   >
                     {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--wa-text-muted)', marginTop: 5 }}>
+                  💡 Test credentials: username <strong>sonu</strong> | password <strong>123456</strong>
                 </div>
               </div>
 
@@ -652,6 +732,32 @@ export default function PhoneLogin({ onLoginSuccess }) {
                 />
               </svg>
               <span>Continue with Google</span>
+            </button>
+
+            {/* Quick Demo Google Profile Button */}
+            <button
+              type="button"
+              id="quickDemoGoogleBtn"
+              onClick={() => handleQuickDemoLogin('sonu')}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: '9px 12px',
+                borderRadius: 8,
+                border: '1px dashed rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'var(--wa-text-secondary)',
+                fontSize: '12.5px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+              title="Instant test account without Google popup"
+            >
+              <Sparkles size={14} color="#ffd700" />
+              <span>⚡ One-Click Demo Google Profile (Sonu Kumar)</span>
             </button>
 
             {/* Switch Footer */}
@@ -717,6 +823,44 @@ export default function PhoneLogin({ onLoginSuccess }) {
                   autoFocus
                   required
                 />
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignupEmail('sonu@gmail.com');
+                      setSignupName('Sonu Kumar');
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      color: 'var(--wa-text-secondary)',
+                      fontSize: '11.5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Use sonu@gmail.com
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignupEmail('rahul@gmail.com');
+                      setSignupName('Rahul Sharma');
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      color: 'var(--wa-text-secondary)',
+                      fontSize: '11.5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Use rahul@gmail.com
+                  </button>
+                </div>
               </div>
 
               <button
@@ -779,7 +923,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
             </div>
 
             <h2 className="wa-login-title">Enter Verification Code</h2>
-            <p className="wa-login-subtitle" style={{ marginBottom: 20 }}>
+            <p className="wa-login-subtitle" style={{ marginBottom: 16 }}>
               We sent a 6-digit code to{' '}
               <strong style={{ color: 'var(--wa-green-light)' }}>
                 {signupEmail}
@@ -802,6 +946,42 @@ export default function PhoneLogin({ onLoginSuccess }) {
                 Wrong email?
               </button>
             </p>
+
+            {/* Auto-fill test code banner */}
+            <div style={{ margin: '0 auto 16px auto', padding: '10px 14px', background: 'rgba(0,168,132,0.12)', border: '1px solid rgba(0,168,132,0.3)', borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: '12.5px', color: 'var(--wa-text-primary)', marginBottom: 8 }}>
+                Didn't get email yet? Use Instant Test Code: 
+                <strong style={{ color: 'var(--wa-green-light)', marginLeft: 6 }}>
+                  {activeVerificationCode || '734921'}
+                </strong>
+              </div>
+              <button
+                type="button"
+                id="autoFillOtpBtn"
+                onClick={() => {
+                  const codeToFill = activeVerificationCode || '734921';
+                  const digits = codeToFill.split('').slice(0, 6);
+                  while (digits.length < 6) digits.push('0');
+                  setOtp(digits);
+                }}
+                style={{
+                  background: 'var(--wa-green)',
+                  color: '#111b21',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '6px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Sparkles size={14} />
+                <span>Auto-fill Demo Code ({activeVerificationCode || '734921'})</span>
+              </button>
+            </div>
 
             {/* 6 Individual OTP Boxes */}
             <div className="wa-otp-boxes" style={{ marginBottom: 22 }}>

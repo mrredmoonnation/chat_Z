@@ -34,7 +34,7 @@ import DisguiseModal from './components/Privacy/DisguiseModal';
 const processedIncomingMessageKeys = new Set();
 
 export default function App() {
-  const { currentUser: authUser, logout: authLogout } = useAuth();
+  const { currentUser: authUser, logout: authLogout, setCurrentUser: setAuthCurrentUser } = useAuth();
   const [currentUser, setCurrentUser] = useState(() => {
     const u = getStoredUser();
     if (u && !u.username) {
@@ -808,6 +808,7 @@ export default function App() {
   // Handle Login Success
   const handleLoginSuccess = (profile) => {
     setCurrentUser(profile);
+    if (setAuthCurrentUser) setAuthCurrentUser(profile);
     saveStoredUser(profile);
     if (profile?.username) {
       publishUserToCloud(profile);
@@ -817,6 +818,7 @@ export default function App() {
   // Handle Profile Updates (Name, Bio, Avatar)
   const handleUpdateProfile = (updatedProfile) => {
     setCurrentUser(updatedProfile);
+    if (setAuthCurrentUser) setAuthCurrentUser(updatedProfile);
     saveStoredUser(updatedProfile);
     if (updatedProfile?.username) {
       publishUserToCloud(updatedProfile);

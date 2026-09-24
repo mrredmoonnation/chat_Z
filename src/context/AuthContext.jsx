@@ -52,56 +52,69 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        try {
-          // Check if profile exists in Firestore Users collection
-          const profile = await getFirestoreUserProfile(user.uid);
-          if (profile) {
-            setCurrentUser(profile);
-            localStorage.setItem('chatz_user_v1', JSON.stringify(profile));
-          } else {
-            // New user without Firestore profile yet: prompt or auto-register
-            const defaultUsername = (user.email ? user.email.split('@')[0] : (user.displayName || 'user'))
-              .toLowerCase()
-              .replace(/[^a-z0-9_]/g, '');
+        // Construct fast profile immediately from Firebase Auth user
+        const defaultUsername = (user.email ? user.email.split('@')[0] : (user.displayName || 'user'))
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '') || `user_${Math.floor(Math.random() * 10000)}`;
 
-            const newProfile = {
-              uid: user.uid,
-              email: user.email || '',
-              displayName: user.displayName || defaultUsername,
-              username: defaultUsername || `user_${Math.floor(Math.random() * 10000)}`,
-              photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
-              about: 'Hey there! I am using Chatz'
-            };
+        const fastProfile = {
+          uid: user.uid,
+          id: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || defaultUsername,
+          name: user.displayName || defaultUsername,
+          username: defaultUsername,
+          photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
+          avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
+          about: 'Hey there! I am using Chatz',
+          authMethod: 'google',
+          joinedAt: Date.now()
+        };
 
-            await saveFirestoreUserProfile(newProfile);
-            setCurrentUser(newProfile);
-            localStorage.setItem('chatz_user_v1', JSON.stringify(newProfile));
-          }
-        } catch (err) {
-          console.warn('Error fetching Firestore user on auth change:', err);
-          // Graceful fallback to Firebase Auth user fields
-          const fallback = {
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || 'User',
-            username: (user.email ? user.email.split('@')[0] : 'user').toLowerCase().replace(/[^a-z0-9_]/g, ''),
-            photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
-            about: 'Hey there! I am using Chatz'
-          };
-          setCurrentUser(fallback);
-          localStorage.setItem('chatz_user_v1', JSON.stringify(fallback));
-        }
+        // Immediately activate user session (0ms delay)
+        setCurrentUser(fastProfile);
+        localStorage.setItem('chatz_user_v1', JSON.stringify(fastProfile));
+        setLoading(false);
+
+        // Background check for custom Firestore profile attributes (non-blocking)
+        getFirestoreUserProfile(user.uid)
+          .then((profile) => {
+            if (profile) {
+              const merged = {
+                ...fastProfile,
+                ...profile,
+                id: profile.uid || user.uid,
+                name: profile.displayName || profile.name || fastProfile.name,
+                avatar: profile.photoURL || profile.avatar || fastProfile.avatar
+              };
+              setCurrentUser(merged);
+              localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+            }
+          })
+          .catch(() => {});
       } else {
+        // User not logged into Firebase Auth. Check if we have a locally active user session!
+        const local = localStorage.getItem('chatz_user_v1');
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            if (parsed && (parsed.username || parsed.name || parsed.id || parsed.uid)) {
+              // Maintain local session (e.g. password login, demo mode, guest)
+              setCurrentUser(parsed);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {}
+        }
         setCurrentUser(null);
-        localStorage.removeItem('chatz_user_v1');
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // 1-Click Google Sign-In Flow
+  // 1-Click Google Sign-In Flow (Instant, non-blocking)
   const loginWithGoogle = async () => {
     setAuthError(null);
     setLoading(true);
@@ -118,33 +131,32 @@ export const AuthProvider = ({ children }) => {
 
       if (!user) throw new Error('No user returned from Google Sign-In.');
 
-      // Check if user exists in Firestore
-      const existingProfile = await getFirestoreUserProfile(user.uid);
-      if (existingProfile) {
-        // Existing user: log in directly
-        setCurrentUser(existingProfile);
-        localStorage.setItem('chatz_user_v1', JSON.stringify(existingProfile));
-        setLoading(false);
-        return existingProfile;
-      }
-
-      // New User: derive username and create Firestore Users document
+      // Derive clean username and instant profile
       const baseName = user.email ? user.email.split('@')[0] : (user.displayName || 'user');
       const cleanU = baseName.toLowerCase().replace(/[^a-z0-9_]/g, '') || `user_${Math.floor(Math.random() * 10000)}`;
 
       const newProfile = {
         uid: user.uid,
+        id: user.uid,
         email: user.email || '',
         displayName: user.displayName || cleanU,
+        name: user.displayName || cleanU,
         username: cleanU,
         photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
-        about: 'Hey there! I am using Chatz'
+        avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
+        about: 'Hey there! I am using Chatz',
+        authMethod: 'google',
+        joinedAt: Date.now()
       };
 
-      await saveFirestoreUserProfile(newProfile);
+      // Set user immediately! 0ms latency, never stuck on Signing In
       setCurrentUser(newProfile);
       localStorage.setItem('chatz_user_v1', JSON.stringify(newProfile));
       setLoading(false);
+
+      // Background Firestore sync (fire-and-forget, never blocks UI)
+      saveFirestoreUserProfile(newProfile).catch(() => {});
+
       return newProfile;
     } catch (err) {
       console.error('Google Sign-In Error:', err);
