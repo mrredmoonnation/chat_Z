@@ -1,4 +1,5 @@
 // State Management, Persistence, Cross-Tab/Device Realtime Broadcast
+import { PAPPU_AI_CONTACT, PAPPU_AI_ID } from './pappuAI';
 
 const STORAGE_KEY = 'chatz_contacts_v1';
 const USER_KEY = 'chatz_user_v1';
@@ -228,19 +229,22 @@ export const saveStoredUser = (user) => {
 export const getStoredContacts = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // Clear legacy dummy data if any from previous versions
-      localStorage.removeItem('wa_clone_data_v2');
-      return [];
+    let contacts = [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Purge any legacy dummy contacts (Jaan, Friends Gang, Rahul)
+      contacts = parsed.filter(
+        (c) => c.id !== 'contact_gf' && c.id !== 'group_family' && c.id !== 'contact_rahul'
+      );
     }
-    const parsed = JSON.parse(raw);
-    // Purge any legacy dummy contacts (Jaan, Friends Gang, Rahul)
-    const cleaned = parsed.filter(
-      (c) => c.id !== 'contact_gf' && c.id !== 'group_family' && c.id !== 'contact_rahul'
-    );
-    return cleaned;
+    // Ensure pappu_AI contact is present
+    const hasPappu = contacts.some((c) => c.id === PAPPU_AI_ID || c.username === 'pappu_ai');
+    if (!hasPappu) {
+      contacts = [PAPPU_AI_CONTACT, ...contacts];
+    }
+    return contacts;
   } catch (e) {
-    return [];
+    return [PAPPU_AI_CONTACT];
   }
 };
 

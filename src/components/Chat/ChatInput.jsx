@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Smile, Paperclip, Mic, Send, Image as ImageIcon, FileText, Camera, X, Trash2, CheckCircle2 } from 'lucide-react';
+import { Smile, Paperclip, Mic, Send, Image as ImageIcon, FileText, Camera, X, Trash2, CheckCircle2, MapPin } from 'lucide-react';
 import { compressImage } from '../../services/imageUtils';
 
 const EMOJIS = [
@@ -17,11 +17,52 @@ export default function ChatInput({
   const [showAttach, setShowAttach] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSecs, setRecordingSecs] = useState(0);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
   const recordIntervalRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  // Handle Live Location Sharing
+  const handleShareLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    setShowAttach(false);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsGettingLocation(false);
+        const { latitude, longitude, accuracy } = position.coords;
+        onSendMessage({
+          type: 'location',
+          latitude,
+          longitude,
+          accuracy: Math.round(accuracy || 0),
+          address: `Live Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+          mapUrl: `https://www.google.com/maps?q=${latitude},${longitude}`
+        });
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        console.warn('Geolocation warning:', error);
+        let msg = 'Could not fetch your location. Please check your browser location permissions.';
+        if (error.code === error.PERMISSION_DENIED) {
+          msg = 'Location permission was denied. Please allow location access in your browser to share your location.';
+        }
+        alert(msg);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
 
   // Close emoji & attach menus on outside touch/click
   useEffect(() => {
@@ -171,6 +212,13 @@ export default function ChatInput({
             </div>
             <span>Camera</span>
           </div>
+
+          <div className="wa-attach-item" onClick={handleShareLocation}>
+            <div className="wa-attach-icon" style={{ backgroundColor: '#00a884' }}>
+              <MapPin size={18} />
+            </div>
+            <span>Share Location</span>
+          </div>
         </div>
       )}
 
@@ -252,6 +300,21 @@ export default function ChatInput({
               id="attachToggleBtn"
             >
               <Paperclip size={22} />
+            </button>
+
+            <button
+              type="button"
+              className={`wa-icon-btn ${isGettingLocation ? 'active' : ''}`}
+              onClick={handleShareLocation}
+              title={isGettingLocation ? 'Acquiring GPS location...' : 'Share Live Location'}
+              id="locationQuickBtn"
+              disabled={isGettingLocation}
+              style={{
+                color: isGettingLocation ? 'var(--wa-green-light)' : undefined,
+                transition: 'transform 0.2s ease'
+              }}
+            >
+              <MapPin size={21} className={isGettingLocation ? 'wa-pulse-spin' : ''} />
             </button>
           </div>
 

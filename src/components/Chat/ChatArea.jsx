@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { 
   Phone, Video, Search, MoreVertical, Check, CheckCheck, 
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
-  ChevronUp, ChevronDown, Sparkles
+  ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot
 } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { sounds } from '../../services/audioEffects';
@@ -15,7 +15,9 @@ export default function ChatArea({
   onBack,
   onStartCall,
   onSendMessage,
-  onClearChat
+  onClearChat,
+  onDeleteMessage,
+  onDeleteChat
 }) {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -25,6 +27,25 @@ export default function ChatArea({
   const [previewImage, setPreviewImage] = useState(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [partnerReaction, setPartnerReaction] = useState(null);
+  const [activeBubbleMenuId, setActiveBubbleMenuId] = useState(null);
+  const [showDeleteChatConfirm, setShowDeleteChatConfirm] = useState(false);
+  const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState(null);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
+
+  // Close bubble menu and options menu on outside pointerdown
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.wa-bubble-menu-popover') && !e.target.closest('.wa-bubble-menu-trigger')) {
+        setActiveBubbleMenuId(null);
+      }
+      if (!e.target.closest('.wa-chat-header-actions')) {
+        setShowOptionsMenu(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, []);
 
   const handlePartnerBitmojiClick = () => {
     sounds.playMessageReceived?.();
@@ -299,18 +320,23 @@ export default function ChatArea({
               >
                 <div
                   onClick={() => {
-                    onClearChat && onClearChat(activeContact.id);
                     setShowOptionsMenu(false);
+                    setShowClearChatConfirm(true);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
-                  Clear Chat
+                  <Sparkles size={15} color="var(--wa-text-secondary)" />
+                  <span>Clear Messages</span>
                 </div>
                 <div
-                  onClick={() => setShowOptionsMenu(false)}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    setShowDeleteChatConfirm(true);
+                  }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--wa-danger)', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
-                  Disappearing Messages
+                  <Trash2 size={15} />
+                  <span>Delete Chat</span>
                 </div>
               </div>
             )}
@@ -513,7 +539,42 @@ export default function ChatArea({
                   </div>
                 )}
 
-                {/* Footer: Time and Read ticks */}
+                {/* Live Location Message */}
+                {msg.type === 'location' && (
+                  <div className="wa-bubble-location">
+                    <div className="wa-location-card">
+                      <div className="wa-location-header">
+                        <div className="wa-location-icon-wrapper">
+                          <MapPin size={22} color="#ffffff" fill="#ea4335" />
+                          <div className="wa-location-ping" />
+                        </div>
+                        <div className="wa-location-text-col">
+                          <div className="wa-location-title">Live Location</div>
+                          <div className="wa-location-coords">
+                            {msg.latitude ? `${msg.latitude.toFixed(4)}, ${msg.longitude.toFixed(4)}` : 'Shared GPS'}
+                          </div>
+                        </div>
+                      </div>
+                      {msg.accuracy && (
+                        <div className="wa-location-accuracy">
+                          Accurate to ~{msg.accuracy} meters
+                        </div>
+                      )}
+                      <a
+                        href={msg.mapUrl || `https://www.google.com/maps?q=${msg.latitude},${msg.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="wa-location-map-btn"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>Open in Google Maps</span>
+                        <ExternalLink size={13} />
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer: Time and Read ticks + Message Menu Trigger */}
                 <div className="wa-bubble-footer">
                   <span className="wa-bubble-time">{msg.time || '10:30 PM'}</span>
                   {isOutgoing && (
@@ -528,6 +589,51 @@ export default function ChatArea({
                       )}
                     </span>
                   )}
+
+                  {/* Dropdown Menu for Single Message Delete / Copy */}
+                  <div className="wa-bubble-menu-wrapper">
+                    <button
+                      type="button"
+                      className="wa-bubble-menu-trigger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveBubbleMenuId(activeBubbleMenuId === msg.id ? null : msg.id);
+                      }}
+                      title="Message options"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+
+                    {activeBubbleMenuId === msg.id && (
+                      <div className="wa-bubble-menu-popover">
+                        {(msg.text || msg.caption || msg.type === 'location') && (
+                          <div
+                            className="wa-bubble-menu-item"
+                            onClick={() => {
+                              const copyContent = msg.text || msg.caption || msg.mapUrl || `${msg.latitude},${msg.longitude}`;
+                              navigator.clipboard?.writeText(copyContent);
+                              setCopiedMsgId(msg.id);
+                              setTimeout(() => setCopiedMsgId(null), 1500);
+                              setActiveBubbleMenuId(null);
+                            }}
+                          >
+                            <Copy size={13} />
+                            <span>{copiedMsgId === msg.id ? 'Copied!' : 'Copy'}</span>
+                          </div>
+                        )}
+                        <div
+                          className="wa-bubble-menu-item delete"
+                          onClick={() => {
+                            setActiveBubbleMenuId(null);
+                            setMessageToDelete(msg);
+                          }}
+                        >
+                          <Trash2 size={13} />
+                          <span>Delete</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -639,6 +745,99 @@ export default function ChatArea({
               alt="Enlarged"
               style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: 8, objectFit: 'contain' }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Message Confirmation Modal */}
+      {messageToDelete && (
+        <div className="wa-modal-backdrop" onClick={() => setMessageToDelete(null)}>
+          <div className="wa-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="wa-confirm-title">Delete message?</div>
+            <div className="wa-confirm-text">
+              Are you sure you want to delete this message? This action cannot be undone.
+            </div>
+            <div className="wa-confirm-actions">
+              <button
+                type="button"
+                className="wa-confirm-btn cancel"
+                onClick={() => setMessageToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="wa-confirm-btn danger"
+                onClick={() => {
+                  onDeleteMessage && onDeleteMessage(activeContact.id, messageToDelete.id);
+                  setMessageToDelete(null);
+                }}
+              >
+                Delete for Me
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Chat Confirmation Modal */}
+      {showClearChatConfirm && (
+        <div className="wa-modal-backdrop" onClick={() => setShowClearChatConfirm(false)}>
+          <div className="wa-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="wa-confirm-title">Clear this chat?</div>
+            <div className="wa-confirm-text">
+              Messages will be cleared from this conversation.
+            </div>
+            <div className="wa-confirm-actions">
+              <button
+                type="button"
+                className="wa-confirm-btn cancel"
+                onClick={() => setShowClearChatConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="wa-confirm-btn danger"
+                onClick={() => {
+                  onClearChat && onClearChat(activeContact.id);
+                  setShowClearChatConfirm(false);
+                }}
+              >
+                Clear Messages
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Entire Chat Confirmation Modal */}
+      {showDeleteChatConfirm && (
+        <div className="wa-modal-backdrop" onClick={() => setShowDeleteChatConfirm(false)}>
+          <div className="wa-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="wa-confirm-title">Delete this chat?</div>
+            <div className="wa-confirm-text">
+              All messages and this conversation with <strong>{activeContact.name}</strong> will be permanently removed.
+            </div>
+            <div className="wa-confirm-actions">
+              <button
+                type="button"
+                className="wa-confirm-btn cancel"
+                onClick={() => setShowDeleteChatConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="wa-confirm-btn danger"
+                onClick={() => {
+                  onDeleteChat && onDeleteChat(activeContact.id);
+                  setShowDeleteChatConfirm(false);
+                }}
+              >
+                Delete Chat
+              </button>
+            </div>
           </div>
         </div>
       )}

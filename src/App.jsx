@@ -23,6 +23,7 @@ import {
   deleteFirestoreStoryItem,
   markFirestoreStorySeen
 } from './services/firestoreChat';
+import { PAPPU_AI_ID, PAPPU_AI_CONTACT, generatePappuReply } from './services/pappuAI';
 import PhoneLogin from './components/Auth/PhoneLogin';
 import Sidebar from './components/Sidebar/Sidebar';
 import ChatArea from './components/Chat/ChatArea';
@@ -173,7 +174,13 @@ export default function App() {
       }
     }
 
-    return [...roomContacts, ...uniqueNonRoom];
+    const list = [...roomContacts, ...uniqueNonRoom];
+    if (!list.some((c) => matchesContact(c, PAPPU_AI_ID) || c.username === 'pappu_ai')) {
+      const storedPappu = contacts.find((c) => matchesContact(c, PAPPU_AI_ID));
+      list.unshift(storedPappu || PAPPU_AI_CONTACT);
+    }
+
+    return list;
   }, [firestoreRooms, contacts, currentUser?.uid, activeContactId]);
 
   // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
@@ -933,7 +940,96 @@ export default function App() {
       || (msgData.type === 'image' ? '📷 Photo' : null)
       || (msgData.type === 'voice' ? '🎤 Voice message' : null)
       || (msgData.type === 'document' ? `📄 ${msgData.fileName || 'Document'}` : null)
+      || (msgData.type === 'location' ? '📍 Live Location' : null)
       || 'Sent a message';
+
+    // Check if this chat is with pappu_AI Bot
+    const isBotChat = activeContactId === PAPPU_AI_ID || 
+                      targetContact?.id === PAPPU_AI_ID || 
+                      targetContact?.username === 'pappu_ai' || 
+                      targetContact?.isBot;
+
+    if (isBotChat) {
+      newMsg.status = 'read';
+
+      // Update local contacts with user message
+      setContacts((prev) => {
+        const updated = prev.map((c) => {
+          if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) {
+            return {
+              ...c,
+              messages: [...(c.messages || []), newMsg],
+              lastMessage: previewText,
+              lastMessageTimestamp: nowTs,
+              unreadCount: 0
+            };
+          }
+          return c;
+        });
+        saveStoredContacts(updated);
+        return updated;
+      });
+
+      // Show typing indicator after 350ms
+      setTimeout(() => {
+        setContacts((prev) =>
+          prev.map((c) =>
+            (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) ? { ...c, isTyping: true } : c
+          )
+        );
+      }, 350);
+
+      // Generate smart response after 1100ms
+      setTimeout(async () => {
+        try {
+          const aiReplyText = await generatePappuReply(msgData, targetContact?.messages || [], currentUser);
+          const replyId = 'msg_pappu_' + Date.now();
+          const replyNowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const replyNowTs = Date.now();
+
+          const aiReplyMsg = {
+            id: replyId,
+            senderId: PAPPU_AI_ID,
+            senderUsername: 'pappu_ai',
+            senderName: 'pappu_AI',
+            senderAvatar: PAPPU_AI_CONTACT.avatar,
+            text: aiReplyText,
+            time: replyNowTime,
+            timestamp: replyNowTs,
+            status: 'read'
+          };
+
+          setContacts((prev) => {
+            const updated = prev.map((c) => {
+              if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) {
+                return {
+                  ...c,
+                  isTyping: false,
+                  messages: [...(c.messages || []), aiReplyMsg],
+                  lastMessage: aiReplyText,
+                  lastMessageTimestamp: replyNowTs,
+                  unreadCount: 0
+                };
+              }
+              return c;
+            });
+            saveStoredContacts(updated);
+            return updated;
+          });
+
+          sounds.playMessageReceived?.();
+        } catch (err) {
+          console.warn('pappu_AI response notice:', err);
+          setContacts((prev) =>
+            prev.map((c) =>
+              (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) ? { ...c, isTyping: false } : c
+            )
+          );
+        }
+      }, 1100);
+
+      return; // Handled locally, no network relay required
+    }
 
     setContacts((prev) => {
       const exists = prev.some((c) => matchesContact(c, activeContactId) || (roomId && matchesContact(c, roomId)));
@@ -1052,10 +1148,53 @@ export default function App() {
   // Clear chat history
   const handleClearChat = (contactId) => {
     setContacts((prev) => {
-      const updated = prev.map((c) => (c.id === contactId ? { ...c, messages: [] } : c));
+      const updated = prev.map((c) => (matchesContact(c, contactId) ? { ...c, messages: [], lastMessage: '' } : c));
       saveStoredContacts(updated);
       return updated;
     });
+  };
+
+  // Delete a single message from chat
+  const handleDeleteMessage = (contactId, messageId) => {
+    setContacts((prev) => {
+      const updated = prev.map((c) => {
+        if (matchesContact(c, contactId)) {
+          const remaining = (c.messages || []).filter((m) => m.id !== messageId && m.clientMsgId !== messageId);
+          const lastMsg = remaining[remaining.length - 1];
+          const previewText = lastMsg
+            ? (lastMsg.text || (lastMsg.type === 'image' ? '📷 Photo' : null) || (lastMsg.type === 'location' ? '📍 Live Location' : null) || 'Message')
+            : '';
+          return {
+            ...c,
+            messages: remaining,
+            lastMessage: previewText,
+            lastMessageTimestamp: lastMsg?.timestamp || null
+          };
+        }
+        return c;
+      });
+      saveStoredContacts(updated);
+      return updated;
+    });
+  };
+
+  // Delete entire chat conversation / contact
+  const handleDeleteChat = (contactId) => {
+    setContacts((prev) => {
+      const isPappu = contactId === PAPPU_AI_ID || contactId === 'pappu_ai';
+      let updated = prev.filter((c) => !matchesContact(c, contactId));
+      if (isPappu) {
+        // Reset pappu_AI to clean state
+        updated = [{ ...PAPPU_AI_CONTACT, messages: [] }, ...updated];
+      }
+      saveStoredContacts(updated);
+      return updated;
+    });
+
+    if (activeContactId && (matchesContact({ id: activeContactId }, contactId) || activeContactId === contactId)) {
+      setActiveContactId(null);
+      setShowMobileChat(false);
+    }
   };
 
   // Add new Story (supports multiple slides / updates + Firestore real-time sync)
@@ -1558,6 +1697,7 @@ export default function App() {
             onAddContact={handleAddContact}
             onStartChatRoom={handleStartChatRoom}
             onLogout={handleLogout}
+            onDeleteChat={handleDeleteChat}
           />
         </div>
 
@@ -1571,6 +1711,8 @@ export default function App() {
             onStartCall={handleStartCall}
             onSendMessage={handleSendMessage}
             onClearChat={handleClearChat}
+            onDeleteMessage={handleDeleteMessage}
+            onDeleteChat={handleDeleteChat}
           />
         </div>
       </div>

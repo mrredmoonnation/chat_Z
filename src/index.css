@@ -3406,4 +3406,435 @@ input, textarea {
   transition: all 0.2s ease;
 }
 
+/* ==========================================================================
+   PAPPU_AI BOT, LIVE LOCATION, CHAT & MESSAGE DELETION STYLES
+   ========================================================================== */
+
+/* pappu_AI Dedicated Banner in Sidebar */
+.wa-ai-bot-banner {
+  margin: 10px 12px 6px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(0, 168, 132, 0.12), rgba(32, 44, 51, 0.7));
+  border: 1px solid rgba(0, 168, 132, 0.3);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+  position: relative;
+  overflow: hidden;
+}
+
+.wa-ai-bot-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.7s ease;
+}
+
+.wa-ai-bot-banner:hover::before {
+  left: 150%;
+}
+
+.wa-ai-bot-banner:hover {
+  background: linear-gradient(135deg, rgba(0, 168, 132, 0.2), rgba(32, 44, 51, 0.9));
+  border-color: var(--wa-green);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 168, 132, 0.2);
+}
+
+.wa-ai-bot-banner.active {
+  background: linear-gradient(135deg, rgba(0, 168, 132, 0.25), rgba(0, 168, 132, 0.1));
+  border-color: var(--wa-green-light);
+  box-shadow: 0 0 16px rgba(0, 168, 132, 0.35);
+}
+
+.wa-ai-bot-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.wa-ai-bot-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #0b141a;
+  border: 2px solid var(--wa-green);
+}
+
+.wa-ai-pulse-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 11px;
+  height: 11px;
+  background-color: var(--wa-green-light);
+  border-radius: 50%;
+  border: 2px solid var(--wa-bg-panel);
+  animation: waPulseRing 1.8s infinite;
+}
+
+.wa-ai-bot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-ai-bot-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.wa-ai-bot-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--wa-text-primary);
+  letter-spacing: 0.2px;
+}
+
+.wa-ai-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--wa-green), #06cf9c);
+  color: #111b21;
+  padding: 1px 7px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.wa-ai-bot-sub {
+  font-size: 12px;
+  color: var(--wa-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wa-ai-bot-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 168, 132, 0.2);
+  color: var(--wa-green-light);
+  border: 1px solid rgba(0, 168, 132, 0.4);
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.wa-ai-bot-banner:hover .wa-ai-bot-action-btn {
+  background: var(--wa-green);
+  color: #111b21;
+  border-color: var(--wa-green);
+}
+
+/* AI Pill in Contacts list */
+.wa-chat-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(0, 168, 132, 0.2);
+  color: var(--wa-green-light);
+  border: 1px solid rgba(0, 168, 132, 0.35);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* Chat Item Delete Button on Hover */
+.wa-chat-item {
+  position: relative;
+}
+
+.wa-chat-item-delete-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--wa-bg-panel-secondary);
+  color: var(--wa-text-secondary);
+  border: 1px solid var(--wa-border);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 5;
+}
+
+.wa-chat-item:hover .wa-chat-item-delete-btn {
+  display: flex;
+}
+
+.wa-chat-item-delete-btn:hover {
+  background: var(--wa-danger);
+  color: #ffffff;
+  border-color: var(--wa-danger);
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Live Location Card inside Message Bubble */
+.wa-bubble-location {
+  min-width: 240px;
+  max-width: 290px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.wa-location-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--wa-border);
+  border-radius: 10px;
+  padding: 10px;
+  gap: 8px;
+}
+
+.wa-location-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wa-location-icon-wrapper {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #ea4335, #c5221f);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(234, 67, 53, 0.4);
+}
+
+.wa-location-ping {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(234, 67, 53, 0.6);
+  animation: waPulseRing 1.8s infinite;
+}
+
+.wa-location-text-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.wa-location-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--wa-text-primary);
+}
+
+.wa-location-coords {
+  font-size: 11.5px;
+  color: var(--wa-text-secondary);
+  font-family: monospace;
+}
+
+.wa-location-accuracy {
+  font-size: 11px;
+  color: var(--wa-green-light);
+  padding: 2px 6px;
+  background: rgba(0, 168, 132, 0.12);
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.wa-location-map-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--wa-green);
+  color: #111b21;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  margin-top: 2px;
+}
+
+.wa-location-map-btn:hover {
+  background: var(--wa-green-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 168, 132, 0.35);
+}
+
+/* Single Message Dropdown Menu */
+.wa-bubble {
+  position: relative;
+}
+
+.wa-bubble-menu-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  margin-left: 4px;
+}
+
+.wa-bubble-menu-trigger {
+  background: none;
+  border: none;
+  color: var(--wa-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: all 0.18s ease;
+}
+
+.wa-bubble:hover .wa-bubble-menu-trigger {
+  opacity: 1;
+}
+
+.wa-bubble-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--wa-text-primary);
+}
+
+.wa-bubble-menu-popover {
+  position: absolute;
+  bottom: 24px;
+  right: 0;
+  background: var(--wa-bg-panel-secondary);
+  border: 1px solid var(--wa-border);
+  box-shadow: var(--wa-shadow-lg);
+  border-radius: 8px;
+  width: 145px;
+  z-index: 150;
+  overflow: hidden;
+  animation: waFadeInDown 0.15s ease-out;
+}
+
+.wa-bubble-menu-item {
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--wa-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.wa-bubble-menu-item:hover {
+  background: var(--wa-bg-hover);
+}
+
+.wa-bubble-menu-item.delete {
+  color: var(--wa-danger);
+}
+
+.wa-bubble-menu-item.delete:hover {
+  background: rgba(234, 67, 53, 0.15);
+}
+
+/* Confirmation Dialogs */
+.wa-confirm-dialog {
+  background: var(--wa-bg-panel);
+  border: 1px solid var(--wa-border);
+  border-radius: 14px;
+  box-shadow: var(--wa-shadow-lg);
+  padding: 22px;
+  width: 90%;
+  max-width: 380px;
+  animation: waScaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wa-confirm-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--wa-text-primary);
+}
+
+.wa-confirm-text {
+  font-size: 13.5px;
+  color: var(--wa-text-secondary);
+  line-height: 1.45;
+}
+
+.wa-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.wa-confirm-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.wa-confirm-btn.cancel {
+  background: transparent;
+  color: var(--wa-text-secondary);
+  border-color: var(--wa-border);
+}
+
+.wa-confirm-btn.cancel:hover {
+  background: var(--wa-bg-hover);
+  color: var(--wa-text-primary);
+}
+
+.wa-confirm-btn.danger {
+  background: var(--wa-danger);
+  color: #ffffff;
+}
+
+.wa-confirm-btn.danger:hover {
+  background: #c5221f;
+  box-shadow: 0 2px 10px rgba(234, 67, 53, 0.35);
+}
+
+@keyframes waPulseSpin {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.wa-pulse-spin {
+  animation: waPulseSpin 1.2s infinite ease-in-out;
+}
+
+
 

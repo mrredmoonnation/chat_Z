@@ -4,7 +4,7 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck, 
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  RotateCcw
+  RotateCcw, Bot, Trash2
 } from 'lucide-react';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
@@ -15,6 +15,7 @@ import {
 import { fetchCloudUsers } from '../../services/cloudRegistry';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
 import { compressAvatar } from '../../services/imageUtils';
+import { PAPPU_AI_ID, PAPPU_AI_CONTACT } from '../../services/pappuAI';
 import StatusView from '../Status/StatusView';
 
 const DRAWER_BIO_PRESETS = [
@@ -49,7 +50,8 @@ export default function Sidebar({
   onUpdateProfile,
   onAddContact,
   onStartChatRoom,
-  onLogout
+  onLogout,
+  onDeleteChat
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
   const [searchQuery, setSearchQuery] = useState('');
@@ -657,6 +659,32 @@ export default function Sidebar({
 
           {/* Chat List */}
           <div className="wa-chat-list">
+            {/* Dedicated pappu_AI Assistant Banner Section */}
+            {!searchQuery.trim() && (
+              <div
+                className={`wa-ai-bot-banner ${activeContactId === PAPPU_AI_ID ? 'active' : ''}`}
+                onClick={() => onSelectContact(PAPPU_AI_ID)}
+                title="Chat with pappu_AI (Smart Assistant)"
+                id="pappuAiBanner"
+              >
+                <div className="wa-ai-bot-avatar">
+                  <img src={PAPPU_AI_CONTACT.avatar} alt="pappu_AI" />
+                  <span className="wa-ai-pulse-dot" />
+                </div>
+                <div className="wa-ai-bot-info">
+                  <div className="wa-ai-bot-title-row">
+                    <span className="wa-ai-bot-title">pappu_AI</span>
+                    <span className="wa-ai-badge">🤖 SMART AI</span>
+                  </div>
+                  <div className="wa-ai-bot-sub">Always Online • Ask anything, jokes, coding & help</div>
+                </div>
+                <div className="wa-ai-bot-action-btn">
+                  <Sparkles size={13} />
+                  <span>Chat</span>
+                </div>
+              </div>
+            )}
+
             {filteredContacts.length === 0 ? (
               !searchQuery.trim() ? (
                 <div className="wa-empty-contacts-state">
@@ -825,7 +853,13 @@ export default function Sidebar({
                         <div className="wa-chat-header-row">
                           <div className="wa-chat-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span>{highlightMatch(contact.name, q)}</span>
-                            {contact.username && (
+                            {(contact.isBot || contact.id === PAPPU_AI_ID || contact.username === 'pappu_ai') && (
+                              <span className="wa-chat-ai-pill">
+                                <Bot size={11} />
+                                <span>AI</span>
+                              </span>
+                            )}
+                            {contact.username && !contact.isBot && contact.id !== PAPPU_AI_ID && (
                               <span className="wa-chat-username-pill">@{contact.username}</span>
                             )}
                           </div>
@@ -859,8 +893,10 @@ export default function Sidebar({
                                     '📷 Photo'
                                   ) : lastMsg?.type === 'voice' ? (
                                     '🎤 Voice message'
+                                  ) : lastMsg?.type === 'location' ? (
+                                    '📍 Live Location'
                                   ) : (
-                                    'Draft'
+                                    contact.lastMessage || 'Draft'
                                   )}
                                 </span>
                               </>
@@ -872,6 +908,21 @@ export default function Sidebar({
                           )}
                         </div>
                       </div>
+
+                      {/* Chat Delete Button on Hover */}
+                      <button
+                        type="button"
+                        className="wa-chat-item-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete chat with "${contact.name}"?`)) {
+                            onDeleteChat && onDeleteChat(contact.id);
+                          }
+                        }}
+                        title="Delete this chat"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   );
                 })}
