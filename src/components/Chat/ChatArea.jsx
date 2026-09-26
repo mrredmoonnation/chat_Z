@@ -1,3 +1,4 @@
+import React, { useRef, useEffect, useState } from 'react';
 import { 
   Phone, Video, Search, MoreVertical, Check, CheckCheck, 
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
