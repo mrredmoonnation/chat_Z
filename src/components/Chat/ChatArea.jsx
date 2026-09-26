@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Phone, Video, Search, MoreVertical, Check, CheckCheck,
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
@@ -401,20 +402,20 @@ export default function ChatArea({
               <MoreVertical size={19} />
             </button>
 
-            {showOptionsMenu && (
+            {showOptionsMenu && ReactDOM.createPortal(
               <div
                 style={{
                   position: 'fixed',
                   top: optionsMenuPos.top,
                   right: optionsMenuPos.right,
-                  backgroundColor: 'rgba(18, 24, 36, 0.96)',
+                  backgroundColor: 'rgba(18, 24, 36, 0.97)',
                   backdropFilter: 'blur(30px) saturate(190%)',
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
                   borderRadius: 16,
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 1px 1px rgba(255, 255, 255, 0.15)',
                   border: '1px solid rgba(255, 255, 255, 0.16)',
-                  width: 190,
-                  zIndex: 999999,
+                  width: 200,
+                  zIndex: 2147483647,
                   overflow: 'hidden'
                 }}
               >
@@ -469,7 +470,8 @@ export default function ChatArea({
                   <Trash2 size={15} />
                   <span>Delete Chat</span>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         </div>

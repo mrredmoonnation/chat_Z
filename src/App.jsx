@@ -1,4 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+
+// Helper: format a "last seen today at HH:MM AM/PM" string
+const getLastSeenText = () => {
+  const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  if (now >= today) return `last seen today at ${time}`;
+  if (now >= yesterday) return `last seen yesterday at ${time}`;
+  return `last seen ${now.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+};
+
 import { 
   getStoredUser, saveStoredUser, getStoredContacts, saveStoredContacts, 
   getStoredStories, saveStoredStories, getSettings, saveSettings,
@@ -794,7 +808,7 @@ export default function App() {
           setContacts((prev) => {
             const updated = prev.map((c) =>
               c.isPartner || c.id === partnerId
-                ? { ...c, isOnline: false, lastSeen: 'Offline' }
+                ? { ...c, isOnline: false, lastSeen: getLastSeenText() }
                 : c
             );
             saveStoredContacts(updated);

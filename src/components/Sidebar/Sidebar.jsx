@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import {
   MessageSquare, CircleDashed, Users, MoreVertical, Search,
   Phone, Video, Sun, Moon, LogOut, CheckCheck,
@@ -529,21 +530,21 @@ export default function Sidebar({
               <LayoutGrid size={19} />
             </button>
 
-            {showMenu && (
+            {showMenu && ReactDOM.createPortal(
               <div
                 className="wa-sidebar-menu-dropdown"
                 style={{
                   position: 'fixed',
                   top: menuPos.top,
                   right: menuPos.right,
-                  backgroundColor: 'rgba(18, 24, 32, 0.96)',
+                  backgroundColor: 'rgba(18, 24, 32, 0.97)',
                   backdropFilter: 'blur(30px) saturate(190%)',
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
                   borderRadius: 18,
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 1px 1px rgba(255, 255, 255, 0.12)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
                   width: 215,
-                  zIndex: 999999,
+                  zIndex: 2147483647,
                   overflow: 'hidden',
                   padding: '8px'
                 }}
@@ -684,7 +685,9 @@ export default function Sidebar({
                   <LogOut size={18} color="#ef4444" />
                   <span>Log out</span>
                 </div>
-              </div>
+              </div>,
+              document.body
+
             )}
           </div>
         </div>
