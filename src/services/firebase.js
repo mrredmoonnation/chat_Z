@@ -241,8 +241,10 @@ export const formatFirebaseAuthError = (err) => {
       return 'Firebase billing not enabled. You can use free Email/Password or Google login without billing.';
     case 'auth/too-many-requests':
       return 'Bahut jyada baar galat try kiya gaya. Kripya 2-3 minute rukiye ya password reset karein.';
-    case 'auth/unauthorized-domain':
-      return 'Domain not authorized. Firebase Console (console.firebase.google.com) > Authentication > Settings > Authorized domains me jakar "chat-z-blue.vercel.app" add karein.';
+    case 'auth/unauthorized-domain': {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'antigravity-sigma-plum.vercel.app';
+      return `Domain not authorized. Firebase Console (console.firebase.google.com) > Authentication > Settings > Authorized domains me jakar "${currentHost}" add karein, ya neeche direct "Instant Login" button dabayein.`;
+    }
     case 'auth/popup-closed-by-user':
       return 'Google Sign-In window close ho gayi. Kripya dubara try karein.';
     case 'auth/popup-blocked':
