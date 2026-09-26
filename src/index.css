@@ -275,9 +275,10 @@ textarea {
   justify-content: space-between;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   gap: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255,255,255,0.07);
 }
 
 .wa-sidebar-menu-dropdown {
@@ -4505,11 +4506,11 @@ textarea {
 /* Glass Floating Headers */
 .wa-sidebar-header,
 .wa-chat-header {
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  backdrop-filter: blur(10px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(190%) !important;
   background: rgba(18, 27, 34, 0.78) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   transition: all 0.3s cubic-bezier(0.2, 0.9, 0.3, 1) !important;
 }
 
@@ -5793,14 +5794,15 @@ textarea {
   padding: 6px 18px 6px 12px !important;
   background: linear-gradient(135deg, rgba(20, 32, 28, 0.88) 0%, rgba(16, 26, 22, 0.92) 100%) !important;
   border: 1px solid rgba(74, 222, 128, 0.22) !important;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.12) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0,168,132,0.12), inset 0 1px 1px rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(10px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(180%) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   z-index: 25 !important;
   flex-shrink: 0 !important;
+  transform: translateZ(0) !important;
 }
 
 .wa-pill-back-btn {

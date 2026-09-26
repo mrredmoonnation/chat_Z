@@ -59,6 +59,8 @@ export default function Sidebar({
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const menuBtnRef = React.useRef(null);
   const [isReloading, setIsReloading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
@@ -512,9 +514,16 @@ export default function Sidebar({
           <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
               id="sidebarMenuBtn"
+              ref={menuBtnRef}
               type="button"
               className="wa-icon-btn"
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={() => {
+                if (!showMenu && menuBtnRef.current) {
+                  const rect = menuBtnRef.current.getBoundingClientRect();
+                  setMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                }
+                setShowMenu(!showMenu);
+              }}
               title="Menu Options"
             >
               <LayoutGrid size={19} />
@@ -524,9 +533,9 @@ export default function Sidebar({
               <div
                 className="wa-sidebar-menu-dropdown"
                 style={{
-                  position: 'absolute',
-                  top: '46px',
-                  right: 0,
+                  position: 'fixed',
+                  top: menuPos.top,
+                  right: menuPos.right,
                   backgroundColor: 'rgba(18, 24, 32, 0.96)',
                   backdropFilter: 'blur(30px) saturate(190%)',
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
@@ -534,7 +543,7 @@ export default function Sidebar({
                   boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.1)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   width: 215,
-                  zIndex: 99999,
+                  zIndex: 999999,
                   overflow: 'hidden',
                   padding: '8px'
                 }}

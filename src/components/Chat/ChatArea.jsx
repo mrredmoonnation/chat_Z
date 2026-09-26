@@ -34,6 +34,8 @@ export default function ChatArea({
   const [voiceSpeed, setVoiceSpeed] = useState(1);
   const [previewImage, setPreviewImage] = useState(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [optionsMenuPos, setOptionsMenuPos] = useState({ top: 0, right: 0 });
+  const optionsMenuBtnRef = React.useRef(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [partnerReaction, setPartnerReaction] = useState(null);
   const [activeBubbleMenuId, setActiveBubbleMenuId] = useState(null);
@@ -385,8 +387,15 @@ export default function ChatArea({
 
           <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
+              ref={optionsMenuBtnRef}
               className="wa-pill-action-btn"
-              onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+              onClick={() => {
+                if (!showOptionsMenu && optionsMenuBtnRef.current) {
+                  const rect = optionsMenuBtnRef.current.getBoundingClientRect();
+                  setOptionsMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                }
+                setShowOptionsMenu(!showOptionsMenu);
+              }}
               title="More Options"
             >
               <MoreVertical size={19} />
@@ -395,17 +404,17 @@ export default function ChatArea({
             {showOptionsMenu && (
               <div
                 style={{
-                  position: 'absolute',
-                  top: '46px',
-                  right: 0,
-                  backgroundColor: 'rgba(18, 24, 36, 0.94)',
+                  position: 'fixed',
+                  top: optionsMenuPos.top,
+                  right: optionsMenuPos.right,
+                  backgroundColor: 'rgba(18, 24, 36, 0.96)',
                   backdropFilter: 'blur(30px) saturate(190%)',
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
                   borderRadius: 16,
                   boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
                   border: '1px solid rgba(255, 255, 255, 0.16)',
-                  width: 180,
-                  zIndex: 99999,
+                  width: 190,
+                  zIndex: 999999,
                   overflow: 'hidden'
                 }}
               >
