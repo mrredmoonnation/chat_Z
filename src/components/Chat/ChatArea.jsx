@@ -1,12 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { 
-  Phone, Video, Search, MoreVertical, Check, CheckCheck, 
+import {
+  Phone, Video, Search, MoreVertical, Check, CheckCheck,
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
   ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot, RotateCw,
-  Info, ShieldAlert, ShieldCheck, User
+  Info, ShieldAlert, ShieldCheck, User, Palette
 } from 'lucide-react';
 import ChatInput from './ChatInput';
 import ContactDetailModal from '../Contact/ContactDetailModal';
+import WallpaperModal from './WallpaperModal';
 import { sounds } from '../../services/audioEffects';
 import { GENDER_AVATARS } from '../../services/store';
 
@@ -22,7 +23,8 @@ export default function ChatArea({
   onSendMessage,
   onClearChat,
   onDeleteMessage,
-  onDeleteChat
+  onDeleteChat,
+  onUpdateChatWallpaper
 }) {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -39,6 +41,7 @@ export default function ChatArea({
   const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false);
 
   // Close bubble menu and options menu on outside pointerdown
   useEffect(() => {
@@ -191,21 +194,22 @@ export default function ChatArea({
   if (!activeContact) {
     return (
       <div className="wa-splash-empty">
-        <div className="wa-splash-icon" style={{ width: 88, height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
-          <img 
-            src="/logo.png" 
-            alt="Chatz Logo" 
-            style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'contain', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }} 
-          />
-        </div>
-        <h2 className="wa-splash-title">Chatz Web</h2>
-        <p className="wa-splash-desc">
-          Send and receive private messages, audio & video calls without keeping your phone online.
-          End-to-end encrypted for ultimate intimacy and privacy.
-        </p>
-        <div className="wa-splash-encryption">
-          <Lock size={14} color="#00a884" />
-          <span>End-to-end encrypted</span>
+        <div className="wa-splash-card">
+          <div className="wa-splash-icon">
+            <img
+              src="/logo.png"
+              alt="Chatz Logo"
+              style={{ width: 48, height: 48, borderRadius: 14, objectFit: 'contain' }}
+            />
+          </div>
+          <h2 className="wa-splash-title">Chatz Liquid Web</h2>
+          <p className="wa-splash-desc">
+            Ultra-private, smoked titanium glass messaging. Select a conversation from the sidebar or tap + to start chatting in real time.
+          </p>
+          <div className="wa-splash-encryption">
+            <Lock size={13} color="#4ade80" />
+            <span>End-to-End Encrypted & Verified</span>
+          </div>
         </div>
       </div>
     );
@@ -243,26 +247,60 @@ export default function ChatArea({
     }
   };
 
+  // Wallpaper background calculation
+  const hasCustomWallpaper = Boolean(activeContact?.wallpaper && activeContact.wallpaper.id !== 'default');
+  const customWallpaperBg = activeContact?.wallpaper?.url
+    ? `url(${activeContact.wallpaper.url})`
+    : activeContact?.wallpaper?.css || undefined;
+
   return (
     <div className="wa-chat-area" ref={chatAreaRef}>
-      {/* WhatsApp Doodle Wallpaper Pattern */}
+      {/* Subtle Liquid Ambient Wallpaper */}
       <div className="wa-doodle-bg" />
+
+      {/* Custom Per-Chat Wallpaper Layer (Instagram style, scoped to this chat) */}
+      <div
+        className="wa-custom-wallpaper-layer"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: customWallpaperBg,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: hasCustomWallpaper ? 1 : 0,
+          transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+          pointerEvents: 'none',
+          zIndex: 0
+        }}
+      >
+        {hasCustomWallpaper && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(6, 9, 15, 0.45)',
+              backdropFilter: 'blur(1px)'
+            }}
+          />
+        )}
+      </div>
 
       {/* Header */}
       <div className="wa-chat-header">
-        <div 
+        <div
           className="wa-chat-header-user clickable"
           onClick={() => setIsProfileModalOpen(true)}
           title="Click to view Contact Profile, User ID & Options"
           style={{ cursor: 'pointer' }}
         >
-          <button 
-            type="button" 
-            className="wa-back-btn" 
+          <button
+            type="button"
+            className="wa-back-btn"
             onClick={(e) => {
               e.stopPropagation();
               onBack && onBack();
-            }} 
+            }}
             title="Back to all chats"
             aria-label="Back to all chats"
           >
@@ -285,8 +323,8 @@ export default function ChatArea({
               {activeContact.isTyping
                 ? 'typing...'
                 : activeContact.isOnline
-                ? 'online'
-                : activeContact.lastSeen || 'last seen recently'}
+                  ? 'online'
+                  : activeContact.lastSeen || 'last seen recently'}
             </div>
           </div>
         </div>
@@ -332,7 +370,7 @@ export default function ChatArea({
             <Search size={19} />
           </button>
 
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
               className="wa-icon-btn"
               onClick={() => setShowOptionsMenu(!showOptionsMenu)}
@@ -345,14 +383,16 @@ export default function ChatArea({
               <div
                 style={{
                   position: 'absolute',
-                  top: '44px',
+                  top: '46px',
                   right: 0,
-                  backgroundColor: 'var(--wa-bg-panel-secondary)',
-                  borderRadius: 8,
-                  boxShadow: 'var(--wa-shadow-lg)',
-                  border: '1px solid var(--wa-border)',
-                  width: 170,
-                  zIndex: 200,
+                  backgroundColor: 'rgba(18, 24, 36, 0.94)',
+                  backdropFilter: 'blur(30px) saturate(190%)',
+                  WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                  borderRadius: 16,
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  width: 180,
+                  zIndex: 99999,
                   overflow: 'hidden'
                 }}
               >
@@ -365,6 +405,17 @@ export default function ChatArea({
                 >
                   <User size={15} color="var(--wa-text-secondary)" />
                   <span>Contact info</span>
+                </div>
+                <div
+                  id="chatWallpaperOptionBtn"
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    setShowWallpaperModal(true);
+                  }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#4ade80' }}
+                >
+                  <Palette size={15} />
+                  <span>Chat Wallpaper</span>
                 </div>
                 <div
                   onClick={() => {
@@ -481,7 +532,7 @@ export default function ChatArea({
 
       {/* Blocked Contact Warning Banner */}
       {isBlocked && (
-        <div 
+        <div
           className="wa-glass-blocked-banner"
           onClick={() => onToggleBlock && onToggleBlock(activeContact)}
           title="Click to unblock this contact"
@@ -508,7 +559,7 @@ export default function ChatArea({
           const msgSenderId = String(msg.senderId || '');
           const msgSenderUsername = String(msg.senderUsername || '').toLowerCase();
 
-          const isOutgoing = 
+          const isOutgoing =
             msgSenderId === 'user' ||
             (myUid && (msgSenderId === myUid || msgSenderId === `user_${myUid}`)) ||
             (myUsername && (
@@ -519,6 +570,32 @@ export default function ChatArea({
           const isCurrentMatch = matchingMsgIds[currentMatchIndex] === msg.id;
           const isMatch = matchingMsgIds.includes(msg.id);
 
+          // Instagram-style system announcement bubble (e.g., "Sonu changed the chat wallpaper to ...")
+          if (msg.type === 'system') {
+            return (
+              <div key={`${msg.id}_${index}`} className="wa-system-message-row" style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                <div
+                  className="wa-system-notice"
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: 'rgba(255, 255, 255, 0.85)',
+                    padding: '5px 16px',
+                    borderRadius: 9999,
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <Sparkles size={13} color="#4ade80" />
+                  <span>{msg.text}</span>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div
               key={`${msg.id}_${index}`}
@@ -526,9 +603,8 @@ export default function ChatArea({
               className={`wa-bubble-row ${isOutgoing ? 'outgoing' : 'incoming'}`}
             >
               <div
-                className={`wa-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${
-                  isCurrentMatch ? 'search-match-active' : isMatch ? 'search-match' : ''
-                }`}
+                className={`wa-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${isCurrentMatch ? 'search-match-active' : isMatch ? 'search-match' : ''
+                  }`}
               >
                 {/* Group sender name if applicable */}
                 {activeContact.isGroup && !isOutgoing && msg.senderName && (
@@ -548,9 +624,9 @@ export default function ChatArea({
                     className="wa-bubble-image"
                     onClick={() => setPreviewImage(msg.url || msg.fileUrl || msg.mediaUrl)}
                   >
-                    <img 
-                      src={msg.url || msg.fileUrl || msg.mediaUrl} 
-                      alt={msg.caption || "Shared"} 
+                    <img
+                      src={msg.url || msg.fileUrl || msg.mediaUrl}
+                      alt={msg.caption || "Shared"}
                       loading="lazy"
                       onError={(e) => {
                         e.target.style.display = 'none';
@@ -649,7 +725,7 @@ export default function ChatArea({
                 <div className="wa-bubble-footer">
                   <span className="wa-bubble-time">{msg.time || '10:30 PM'}</span>
                   {isOutgoing && (
-                    <span 
+                    <span
                       className={`wa-bubble-ticks ${msg.status === 'read' ? 'blue' : 'grey'}`}
                       title={msg.status === 'read' ? 'Read (Double Blue Tick)' : msg.status === 'delivered' ? 'Delivered (Double Grey Tick)' : 'Sent (Single Grey Tick)'}
                     >
@@ -712,12 +788,12 @@ export default function ChatArea({
         })}
 
         {/* Dynamic bottom spacer: Expands when partner is typing to push messages completely above the peeking emoji */}
-        <div 
-          className="wa-chat-bottom-spacer" 
-          style={{ 
+        <div
+          className="wa-chat-bottom-spacer"
+          style={{
             height: activeContact?.isTyping ? '85px' : '10px',
-            transition: 'height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' 
-          }} 
+            transition: 'height 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}
         />
         <div ref={messagesEndRef} />
       </div>
@@ -732,7 +808,7 @@ export default function ChatArea({
           return (
             <div className="wa-snap-live-stage">
               {/* Partner's Peeking Bitmoji: Ducks into typing box when idle, pops up when typing */}
-              <div 
+              <div
                 className={`wa-snap-peeker partner ${isPartnerTyping ? 'is-peeking' : 'is-tucked'}`}
                 title={isPartnerTyping ? `${activeContact?.name || 'Friend'} is typing...` : ''}
                 onClick={handlePartnerBitmojiClick}
@@ -763,10 +839,10 @@ export default function ChatArea({
 
                 {/* Bitmoji Character Head */}
                 <div className="wa-snap-avatar-ring">
-                  <img 
-                    src={partnerBitmoji} 
-                    alt={activeContact?.name || 'Partner'} 
-                    className="wa-snap-bitmoji-img" 
+                  <img
+                    src={partnerBitmoji}
+                    alt={activeContact?.name || 'Partner'}
+                    className="wa-snap-bitmoji-img"
                   />
                   <span className="wa-snap-pulse-beacon" />
                 </div>
@@ -924,6 +1000,17 @@ export default function ChatArea({
         onStartCall={onStartCall}
         onClearChat={onClearChat}
         onDeleteChat={onDeleteChat}
+      />
+
+      {/* Instagram-style Per-Chat Wallpaper & Theme Modal */}
+      <WallpaperModal
+        isOpen={showWallpaperModal}
+        onClose={() => setShowWallpaperModal(false)}
+        currentWallpaper={activeContact?.wallpaper}
+        onSaveWallpaper={(newWallpaper) => {
+          onUpdateChatWallpaper && onUpdateChatWallpaper(activeContact.id, newWallpaper);
+        }}
+        contactName={activeContact?.name || activeContact?.username}
       />
     </div>
   );

@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Lock, ArrowRight, ArrowLeft, Check, ShieldCheck, 
+import {
+  Lock, ArrowRight, ArrowLeft, Check, ShieldCheck,
   AlertCircle, RefreshCw, Mail, User, Info, AtSign,
   Camera, CheckCircle2, Send, Eye, EyeOff, KeyRound, UserCheck
 } from 'lucide-react';
-import { 
+import {
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
-  isUsernameAvailable, cleanUsername, 
+  isUsernameAvailable, cleanUsername,
   isValidUsernameFormat, registerUsername,
-  saveAccountCredentials, findAccountByUsernameOrEmail, 
+  saveAccountCredentials, findAccountByUsernameOrEmail,
   verifyAccountCredentials
 } from '../../services/store';
-import { 
-  isFirebaseConfigured, signInWithGoogle, 
-  signUpWithEmail, logInWithEmail, formatFirebaseAuthError 
+import {
+  isFirebaseConfigured, signInWithGoogle,
+  signUpWithEmail, logInWithEmail, formatFirebaseAuthError
 } from '../../services/firebase';
 import { sendRealEmailOtp } from '../../services/emailOtp';
 import { publishUserToCloud } from '../../services/cloudRegistry';
@@ -230,8 +230,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
   // Instant 1-Click Direct Login helper (bypasses Firebase domain requirements)
   const handleInstantQuickLogin = (overrideName) => {
-    const defaultName = (typeof overrideName === 'string' && overrideName.trim()) 
-      ? overrideName.trim() 
+    const defaultName = (typeof overrideName === 'string' && overrideName.trim())
+      ? overrideName.trim()
       : (loginIdentifier.trim() || ('User_' + Math.floor(100 + Math.random() * 900)));
     const clean = cleanUsername(defaultName.split('@')[0]) || ('user_' + Math.floor(100 + Math.random() * 900));
     const userProfile = {
@@ -524,14 +524,27 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
   return (
     <div className="wa-login-wrapper">
-      {/* Top Banner with Brand */}
-      <div className="wa-login-top-bar" style={{ gap: 10 }}>
-        <img 
-          src="/logo.png" 
-          alt="Chatz Logo" 
-          style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'contain' }} 
-        />
-        <span>CHATZ WEB</span>
+      {/* Living Moving Video Wallpaper (Gen-Z Undulating Liquid Metallic Silk + Glowing Neon Mesh) */}
+      <div className="wa-login-moving-bg" aria-hidden="true">
+        <div className="wa-liquid-video-layer" />
+        <div className="wa-liquid-orb orb-1" />
+        <div className="wa-liquid-orb orb-2" />
+        <div className="wa-liquid-orb orb-3" />
+        <div className="wa-liquid-grid-overlay" />
+      </div>
+
+      {/* Floating Glass Brand Capsule Navbar */}
+      <div className="wa-login-top-bar">
+        <div className="wa-login-brand-pill">
+          <img
+            src="/logo.png"
+            alt="Chatz Logo"
+            style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+          <span className="wa-login-brand-text">CHATZ WEB</span>
+          <span className="wa-neon-dot" style={{ width: 7, height: 7 }} />
+        </div>
       </div>
 
       <div className="wa-login-card">
@@ -587,15 +600,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
         {authMode === 'login' && (
           <div style={{ width: '100%' }}>
             {/* Email / Lock Icon */}
-            <div 
-              className="wa-login-icon" 
-              style={{ 
-                backgroundColor: 'rgba(0, 168, 132, 0.15)', 
-                color: 'var(--wa-green)', 
-                margin: '0 auto 16px auto' 
-              }}
-            >
-              <Lock size={28} />
+            <div className="wa-login-icon">
+              <Lock size={26} />
             </div>
 
             <h2 className="wa-login-title">Sign in to Chatz</h2>
@@ -608,7 +614,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <button
                 type="button"
                 className="wa-auth-tab active"
-                onClick={() => {}}
+                onClick={() => { }}
               >
                 <Lock size={15} />
                 <span>Password Login</span>
@@ -751,9 +757,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
           <div style={{ width: '100%' }}>
             {/* Header row with Back button */}
             <div className="wa-auth-header-row">
-              <button 
-                type="button" 
-                className="wa-auth-back-btn" 
+              <button
+                type="button"
+                className="wa-auth-back-btn"
                 onClick={() => handleModeChange('login')}
                 title="Back to password login"
               >
@@ -763,15 +769,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <span style={{ fontSize: '12px', color: 'var(--wa-text-muted)' }}>Sign Up Step 1</span>
             </div>
 
-            <div 
-              className="wa-login-icon" 
-              style={{ 
-                backgroundColor: 'rgba(234, 67, 53, 0.15)', 
-                color: '#ea4335', 
-                margin: '0 auto 16px auto' 
-              }}
-            >
-              <Mail size={28} />
+            <div className="wa-login-icon">
+              <Mail size={26} />
             </div>
 
             <h2 className="wa-login-title">Verify Gmail with OTP</h2>
@@ -833,9 +832,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
           <form onSubmit={handleOtpSubmit} style={{ width: '100%' }}>
             {/* Header row with Back button */}
             <div className="wa-auth-header-row">
-              <button 
-                type="button" 
-                className="wa-auth-back-btn" 
+              <button
+                type="button"
+                className="wa-auth-back-btn"
                 onClick={() => handleModeChange('signup_email')}
                 title="Go back to change Gmail"
               >
@@ -845,15 +844,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <span style={{ fontSize: '12px', color: 'var(--wa-text-muted)' }}>Step 2 of 3</span>
             </div>
 
-            <div 
-              className="wa-login-icon" 
-              style={{ 
-                margin: '0 auto 16px auto',
-                backgroundColor: 'rgba(0, 168, 132, 0.15)',
-                color: 'var(--wa-green)'
-              }}
-            >
-              <Lock size={28} />
+            <div className="wa-login-icon">
+              <Lock size={26} />
             </div>
 
             <h2 className="wa-login-title">Enter Verification Code</h2>
@@ -866,12 +858,12 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <button
                 type="button"
                 onClick={() => handleModeChange('signup_email')}
-                style={{ 
-                  color: '#53bdeb', 
-                  cursor: 'pointer', 
-                  textDecoration: 'underline', 
-                  background: 'none', 
-                  border: 'none', 
+                style={{
+                  color: '#53bdeb',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  background: 'none',
+                  border: 'none',
                   padding: 0,
                   fontSize: 'inherit',
                   fontFamily: 'inherit'
@@ -959,9 +951,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
           <form onSubmit={handleCompleteRegistration} style={{ width: '100%' }}>
             {/* Header row with Back button */}
             <div className="wa-auth-header-row">
-              <button 
-                type="button" 
-                className="wa-auth-back-btn" 
+              <button
+                type="button"
+                className="wa-auth-back-btn"
                 onClick={() => handleModeChange('login')}
                 title="Cancel and go to login"
               >
@@ -978,10 +970,10 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
             {/* Live Preview Card */}
             <div className="wa-profile-live-preview">
-              <img 
-                src={customAvatar || avatar} 
-                alt="Avatar" 
-                className="preview-avatar" 
+              <img
+                src={customAvatar || avatar}
+                alt="Avatar"
+                className="preview-avatar"
               />
               <div className="preview-info">
                 <div className="preview-name" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -1003,9 +995,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
 
             {/* Profile Avatar Picker */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <label 
-                htmlFor="avatarUploadInput" 
-                className="wa-profile-upload-circle" 
+              <label
+                htmlFor="avatarUploadInput"
+                className="wa-profile-upload-circle"
                 title="Click to upload custom photo"
               >
                 <img src={customAvatar || avatar} alt="Profile preview" />
@@ -1238,10 +1230,10 @@ export default function PhoneLogin({ onLoginSuccess }) {
               type="submit"
               className="wa-login-cta-btn"
               disabled={
-                loading || 
-                !signupName.trim() || 
-                usernameStatus !== 'available' || 
-                signupPassword.length < 6 || 
+                loading ||
+                !signupName.trim() ||
+                usernameStatus !== 'available' ||
+                signupPassword.length < 6 ||
                 signupPassword !== confirmPassword
               }
             >

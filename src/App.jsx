@@ -38,6 +38,20 @@ import PartnerConnectModal from './components/Privacy/PartnerConnectModal';
 // Memory cache to prevent duplicate processing of the same incoming message across transports
 const processedIncomingMessageKeys = new Set();
 
+// Persistent per-chat wallpaper lookup helper (Instagram-style theme sync)
+const getStoredChatWallpaper = (...keys) => {
+  try {
+    const map = JSON.parse(localStorage.getItem('chatz_chat_wallpapers_v1') || '{}');
+    for (const k of keys) {
+      if (!k) continue;
+      const lower = String(k).toLowerCase();
+      if (map[k]) return map[k];
+      if (map[lower]) return map[lower];
+    }
+  } catch (_) {}
+  return null;
+};
+
 export default function App() {
   const { currentUser: authUser, logout: authLogout, setCurrentUser: setAuthCurrentUser } = useAuth();
   const [currentUser, setCurrentUser] = useState(() => {
@@ -175,6 +189,8 @@ export default function App() {
         (otherProfile.username && matchesContact(c, otherProfile.username))
       );
 
+      const storedWp = r.wallpaper || existing?.wallpaper || getStoredChatWallpaper(r.id, otherUid, otherProfile.username, existing?.id, existing?.username);
+
       return {
         id: r.id,
         roomId: r.id,
@@ -188,14 +204,22 @@ export default function App() {
         lastMessage: r.lastMessage || existing?.lastMessage || '',
         lastMessageTimestamp: r.lastMessageTimestamp || existing?.lastMessageTimestamp,
         unreadCount: (activeContactId && (matchesContact(r, activeContactId) || (existing && matchesContact(existing, activeContactId)))) ? 0 : (existing?.unreadCount || 0),
-        messages: existing?.messages || []
+        messages: existing?.messages || [],
+        wallpaper: storedWp
       };
     });
 
     // Strictly eliminate any contact that matches an existing Firestore room
     const nonRoomContacts = contacts
       .filter((c) => !roomContacts.some((rc) => matchesContact(c, rc)))
-      .map((c) => (matchesContact(c, activeContactId) ? { ...c, unreadCount: 0 } : c));
+      .map((c) => {
+        const storedWp = c.wallpaper || getStoredChatWallpaper(c.id, c.username);
+        return {
+          ...c,
+          wallpaper: storedWp,
+          unreadCount: matchesContact(c, activeContactId) ? 0 : (c.unreadCount || 0)
+        };
+      });
 
     // Deduplicate nonRoomContacts among themselves to prevent duplicate contact cards
     const uniqueNonRoom = [];
@@ -567,6 +591,59 @@ export default function App() {
     }
   };
 
+  // Handle incoming Chat Wallpaper Change from remote partner (Real-time Instagram style sync)
+  const handleIncomingChatWallpaper = (payload, sourcePeerId = null) => {
+    if (!payload?.wallpaper) return;
+
+    const { contactId, username, targetUsername, roomId, wallpaper, senderName } = payload;
+    const displayName = senderName || payload.changerName || username || 'Partner';
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTs = Date.now();
+
+    const systemMsg = {
+      id: 'sys_wp_' + nowTs + '_' + Math.random().toString(36).substring(2, 6),
+      type: 'system',
+      text: `${displayName} changed the chat wallpaper${wallpaper.name ? ` to ${wallpaper.name}` : ''}`,
+      time: nowTime,
+      timestamp: nowTs
+    };
+
+    setContacts((prev) => {
+      let matched = false;
+      const updated = prev.map((c) => {
+        const isMatch =
+          (contactId && matchesContact(c, contactId)) ||
+          (username && c.username?.toLowerCase() === username.toLowerCase()) ||
+          (c.name && displayName && c.name.toLowerCase() === displayName.toLowerCase()) ||
+          (roomId && (c.roomId === roomId || c.id === roomId));
+
+        if (isMatch) {
+          matched = true;
+          return {
+            ...c,
+            wallpaper,
+            messages: [...(c.messages || []), systemMsg]
+          };
+        }
+        return c;
+      });
+
+      if (matched) {
+        saveStoredContacts(updated);
+        try {
+          const map = JSON.parse(localStorage.getItem('chatz_chat_wallpapers_v1') || '{}');
+          if (contactId) map[contactId] = wallpaper;
+          if (username) map[username.toLowerCase()] = wallpaper;
+          if (roomId) map[roomId] = wallpaper;
+          localStorage.setItem('chatz_chat_wallpapers_v1', JSON.stringify(map));
+        } catch (_) {}
+        sounds.playMessageReceived?.();
+        return updated;
+      }
+      return prev;
+    });
+  };
+
   // Handle Delivery Receipt (double grey ticks)
   const handleDeliveryReceipt = (messageId) => {
     if (!messageId) return;
@@ -632,6 +709,8 @@ export default function App() {
           handleCallAcceptedSignal(payload);
         } else if (payload.type === 'END_CALL') {
           handleCallEndedSignal(payload);
+        } else if (payload.type === 'CHAT_WALLPAPER_CHANGE') {
+          handleIncomingChatWallpaper(payload);
         }
       });
     };
@@ -781,6 +860,8 @@ export default function App() {
           handleCallAcceptedSignal(payload);
         } else if (payload?.type === 'END_CALL') {
           handleCallEndedSignal(payload);
+        } else if (payload?.type === 'CHAT_WALLPAPER_CHANGE') {
+          handleIncomingChatWallpaper(payload, peerId);
         }
       },
       onIncomingCall: (mediaCall) => {
@@ -896,6 +977,8 @@ export default function App() {
         handleCallEndedSignal(data.payload);
       } else if (data.type === 'STORIES_UPDATED') {
         setStories(data.payload);
+      } else if (data.type === 'CHAT_WALLPAPER_UPDATED') {
+        handleIncomingChatWallpaper(data.payload);
       }
     });
 
@@ -1280,6 +1363,97 @@ export default function App() {
       setActiveContactId(null);
       setShowMobileChat(false);
     }
+  };
+
+  // Handle Per-Chat Wallpaper & Theme Update (Instagram style real-time 2-way sync)
+  const handleUpdateChatWallpaper = (contactId, newWallpaper) => {
+    if (!contactId || !newWallpaper) return;
+
+    const displayName = currentUser?.displayName || currentUser?.name || currentUser?.username || 'You';
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTs = Date.now();
+
+    const systemMsg = {
+      id: 'sys_wp_' + nowTs + '_' + Math.random().toString(36).substring(2, 6),
+      type: 'system',
+      text: `You changed the chat wallpaper${newWallpaper.name ? ` to ${newWallpaper.name}` : ''}`,
+      time: nowTime,
+      timestamp: nowTs
+    };
+
+    const targetContact = mergedContacts.find((c) => matchesContact(c, contactId) || c.id === contactId) ||
+      contacts.find((c) => matchesContact(c, contactId) || c.id === contactId);
+
+    setContacts((prev) => {
+      const updated = prev.map((c) => {
+        if (matchesContact(c, contactId) || (targetContact && matchesContact(c, targetContact))) {
+          return {
+            ...c,
+            wallpaper: newWallpaper,
+            messages: [...(c.messages || []), systemMsg]
+          };
+        }
+        return c;
+      });
+      saveStoredContacts(updated);
+      return updated;
+    });
+
+    // Save to persistent localStorage map
+    try {
+      const map = JSON.parse(localStorage.getItem('chatz_chat_wallpapers_v1') || '{}');
+      if (contactId) map[contactId] = newWallpaper;
+      if (targetContact?.id) map[targetContact.id] = newWallpaper;
+      if (targetContact?.username) map[targetContact.username.toLowerCase()] = newWallpaper;
+      if (targetContact?.otherUid) map[targetContact.otherUid] = newWallpaper;
+      if (targetContact?.roomId) map[targetContact.roomId] = newWallpaper;
+      localStorage.setItem('chatz_chat_wallpapers_v1', JSON.stringify(map));
+    } catch (_) {}
+
+    sounds.playMessageSent?.();
+
+    // Broadcast across local browser tabs
+    broadcastChange('CHAT_WALLPAPER_UPDATED', {
+      contactId,
+      roomId: targetContact?.roomId || null,
+      username: currentUser?.username,
+      targetUsername: targetContact?.username,
+      wallpaper: newWallpaper,
+      senderName: displayName
+    });
+
+    // Send to remote partner via Real-Time Cloud Relay & P2P
+    const syncPayload = {
+      type: 'CHAT_WALLPAPER_CHANGE',
+      contactId: currentUser?.uid || currentUser?.id || currentUser?.username,
+      username: currentUser?.username,
+      senderName: displayName,
+      senderAvatar: currentUser?.photoURL || currentUser?.avatar,
+      wallpaper: newWallpaper,
+      roomId: targetContact?.roomId || null,
+      timestamp: nowTs
+    };
+
+    const targetUsername = targetContact?.username ||
+      (targetContact?.id?.startsWith('wa_user_') ? targetContact.id.replace('wa_user_', '') : null) ||
+      targetContact?.otherUid;
+
+    const candidateTargets = Array.from(new Set([
+      targetUsername,
+      targetContact?.otherUid,
+      targetContact?.uid,
+      targetContact?.id,
+      targetContact?.phone
+    ].map((t) => (t ? cleanUsername(t) : '')).filter(Boolean)));
+
+    candidateTargets.forEach((target) => {
+      sendCloudInboxMessage(target, syncPayload);
+      sendOfflineCloudMessage(target, syncPayload);
+      sendOfflineInboxMessage(target, syncPayload);
+    });
+
+    const targetPeerId = targetUsername ? `wa_user_${targetUsername}` : contactId;
+    p2pRef.current?.sendData(syncPayload, targetPeerId);
   };
 
   // Handle manual chat refresh & sync (from the chat header refresh button)
@@ -1830,6 +2004,7 @@ export default function App() {
             onClearChat={handleClearChat}
             onDeleteMessage={handleDeleteMessage}
             onDeleteChat={handleDeleteChat}
+            onUpdateChatWallpaper={handleUpdateChatWallpaper}
           />
         </div>
       </div>

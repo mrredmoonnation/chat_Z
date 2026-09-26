@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  MessageSquare, CircleDashed, Users, MoreVertical, Search, 
-  Phone, Video, Sun, Moon, LogOut, CheckCheck, 
+import {
+  MessageSquare, CircleDashed, Users, MoreVertical, Search,
+  Phone, Video, Sun, Moon, LogOut, CheckCheck,
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
   RotateCcw, Bot, Trash2, Settings, ShieldAlert
 } from 'lucide-react';
 import SettingsModal from '../Settings/SettingsModal';
-import { 
+import {
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
-  isUsernameAvailable, cleanUsername, 
+  isUsernameAvailable, cleanUsername,
   isValidUsernameFormat, registerUsername, searchUsersByUsername,
   subscribeToBroadcast, matchesContact
 } from '../../services/store';
@@ -269,10 +269,21 @@ export default function Sidebar({
     );
   };
 
+  // Category filter state ('all', 'unread', 'groups', 'ai', 'favorites') - Reference Image 1
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
   // Filter contacts by search query (name, username, phone, about, or messages inside the chat)
   const q = searchQuery.trim().toLowerCase();
   const cleanQ = cleanUsername(searchQuery);
+  const totalUnreadCount = contacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
   const filteredContacts = contacts.filter((c) => {
+    // 1. Category Filter
+    if (categoryFilter === 'unread' && !c.unreadCount) return false;
+    if (categoryFilter === 'groups' && !c.isGroup) return false;
+    if (categoryFilter === 'ai' && c.id !== PAPPU_AI_ID) return false;
+    if (categoryFilter === 'favorites' && !c.isFavorite) return false;
+
+    // 2. Search Query Filter
     if (!q) return true;
     const nameMatch = c.name?.toLowerCase().includes(q);
     const userMatch = c.username?.toLowerCase().includes(cleanQ || q);
@@ -322,7 +333,7 @@ export default function Sidebar({
   const globalUserResults = React.useMemo(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) return [];
     const localMatches = searchUsersByUsername(searchQuery);
-    
+
     // Combine local store and Firestore users
     const combined = [...firestoreSearchResults, ...localMatches];
     const seen = new Set();
@@ -345,7 +356,7 @@ export default function Sidebar({
 
     const existingIds = new Set(contacts.map((c) => c.id));
     const existingUsernames = new Set(contacts.map((c) => c.username?.toLowerCase()).filter(Boolean));
-    return deduped.filter((u) => 
+    return deduped.filter((u) =>
       u.uid !== currentUser?.uid &&
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase() &&
       !existingIds.has(u.id) &&
@@ -376,7 +387,7 @@ export default function Sidebar({
       }
     });
 
-    return deduped.filter((u) => 
+    return deduped.filter((u) =>
       u.uid !== currentUser?.uid &&
       u.username?.toLowerCase() !== currentUser?.username?.toLowerCase()
     );
@@ -393,31 +404,44 @@ export default function Sidebar({
     <aside className="wa-sidebar">
       {/* Top Header */}
       <div className="wa-sidebar-header">
-        <div 
-          className="wa-avatar" 
+        {/* Reference Image 1: "Hello, Michael" User Capsule Dock */}
+        <div
+          className="wa-user-capsule"
           title="Click to view & edit your Profile (Name & Bio)"
           onClick={() => setIsProfileDrawerOpen(true)}
-          style={{ cursor: 'pointer', position: 'relative' }}
         >
-          <img src={currentUser?.avatar} alt={currentUser?.name} />
-          <div 
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              right: 0,
-              width: 14,
-              height: 14,
-              borderRadius: '50%',
-              backgroundColor: 'var(--wa-green)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#111b21',
-              border: '1.5px solid var(--wa-bg-header)'
-            }}
-            title="Edit Profile"
-          >
-            <Camera size={9} />
+          <div className="wa-avatar" style={{ position: 'relative' }}>
+            <img
+              src={currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.username || 'user'}`}
+              alt={currentUser?.name || 'User'}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.username || 'user'}`;
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                backgroundColor: 'var(--wa-green)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#111b21',
+                border: '1.5px solid rgba(18, 24, 34, 0.9)'
+              }}
+              title="Edit Profile"
+            >
+              <Camera size={9} />
+            </div>
+          </div>
+          <div className="wa-user-capsule-info">
+            <span className="wa-user-capsule-greet">Hello,</span>
+            <span className="wa-user-capsule-name">{currentUser?.name || currentUser?.username || 'Sonu'}</span>
           </div>
         </div>
 
@@ -504,7 +528,7 @@ export default function Sidebar({
           </button>
 
           {/* 3 Dots Menu */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
               id="sidebarMenuBtn"
               type="button"
@@ -520,14 +544,16 @@ export default function Sidebar({
                 className="wa-sidebar-menu-dropdown"
                 style={{
                   position: 'absolute',
-                  top: '44px',
+                  top: '46px',
                   right: 0,
-                  backgroundColor: 'var(--wa-bg-panel-secondary)',
-                  borderRadius: 8,
-                  boxShadow: 'var(--wa-shadow-lg)',
-                  border: '1px solid var(--wa-border)',
-                  width: 180,
-                  zIndex: 200,
+                  backgroundColor: 'rgba(18, 24, 36, 0.94)',
+                  backdropFilter: 'blur(30px) saturate(190%)',
+                  WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                  borderRadius: 16,
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  width: 190,
+                  zIndex: 99999,
                   overflow: 'hidden'
                 }}
               >
@@ -682,6 +708,65 @@ export default function Sidebar({
                 </button>
               )}
             </div>
+
+            {/* Category Filter Pills Bar - Reference Image 1 */}
+            <div className="wa-filter-pill-bar">
+              <button
+                type="button"
+                className="wa-filter-pill-btn plus-btn"
+                onClick={() => setIsAddContactOpen(true)}
+                title="Add New Contact"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className={`wa-filter-pill-btn ${categoryFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setCategoryFilter('all')}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={`wa-filter-pill-btn ${categoryFilter === 'unread' ? 'active' : ''}`}
+                onClick={() => setCategoryFilter('unread')}
+              >
+                Unread
+                {totalUnreadCount > 0 && (
+                  <span style={{ 
+                    background: '#22c55e', 
+                    color: '#fff', 
+                    borderRadius: 10, 
+                    padding: '1px 5px', 
+                    fontSize: 10, 
+                    fontWeight: 700 
+                  }}>
+                    {totalUnreadCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                className={`wa-filter-pill-btn ${categoryFilter === 'groups' ? 'active' : ''}`}
+                onClick={() => setCategoryFilter('groups')}
+              >
+                Groups
+              </button>
+              <button
+                type="button"
+                className={`wa-filter-pill-btn ${categoryFilter === 'ai' ? 'active' : ''}`}
+                onClick={() => setCategoryFilter('ai')}
+              >
+                ✨ AI Bot
+              </button>
+              <button
+                type="button"
+                className={`wa-filter-pill-btn ${categoryFilter === 'favorites' ? 'active' : ''}`}
+                onClick={() => setCategoryFilter('favorites')}
+              >
+                ★ Favorites
+              </button>
+            </div>
           </div>
 
           {/* Chat List */}
@@ -761,8 +846,8 @@ export default function Sidebar({
                             <div className="wa-global-user-handle">@{u.username}</div>
                             {u.about && <div className="wa-global-user-about">{u.about}</div>}
                           </div>
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             className="wa-global-user-chat-btn"
                             onClick={() => handleConnectWithGlobalUser(u)}
                           >
@@ -781,10 +866,10 @@ export default function Sidebar({
                         <MessageSquare size={14} />
                         <span>Start new chat</span>
                       </div>
-                      <div 
-                        className="wa-global-user-item" 
-                        style={{ 
-                          backgroundColor: 'var(--wa-bg-panel)', 
+                      <div
+                        className="wa-global-user-item"
+                        style={{
+                          backgroundColor: 'var(--wa-bg-panel)',
                           border: '1.5px solid var(--wa-green)',
                           boxShadow: 'var(--wa-shadow-sm)'
                         }}
@@ -797,13 +882,13 @@ export default function Sidebar({
                           <div className="wa-global-user-name">@{cleanQ}</div>
                           <div className="wa-global-user-about">Tap Chat to start a conversation</div>
                         </div>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="wa-global-user-chat-btn"
                           onClick={() => handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ })}
-                          style={{ 
-                            backgroundColor: 'var(--wa-green)', 
-                            color: '#111b21', 
+                          style={{
+                            backgroundColor: 'var(--wa-green)',
+                            color: '#111b21',
                             fontWeight: 600,
                             padding: '8px 16px',
                             borderRadius: 20
@@ -855,13 +940,13 @@ export default function Sidebar({
                   // Check if any message in this chat matches the query
                   const matchedMsg = q
                     ? contact.messages
-                        ?.slice()
-                        .reverse()
-                        .find(
-                          (m) =>
-                            (m.text && m.text.toLowerCase().includes(q)) ||
-                            (m.fileName && m.fileName.toLowerCase().includes(q))
-                        )
+                      ?.slice()
+                      .reverse()
+                      .find(
+                        (m) =>
+                          (m.text && m.text.toLowerCase().includes(q)) ||
+                          (m.fileName && m.fileName.toLowerCase().includes(q))
+                      )
                     : null;
 
                   return (
@@ -900,10 +985,10 @@ export default function Sidebar({
                             ) : (
                               <>
                                 {isLastMsgOutgoing && !matchedMsg && (
-                                  <CheckCheck 
-                                    size={14} 
-                                    color={lastMsg?.status === 'read' ? "#53bdeb" : "var(--wa-text-secondary)"} 
-                                    style={{ flexShrink: 0 }} 
+                                  <CheckCheck
+                                    size={14}
+                                    color={lastMsg?.status === 'read' ? "#53bdeb" : "var(--wa-text-secondary)"}
+                                    style={{ flexShrink: 0 }}
                                   />
                                 )}
                                 <span>
@@ -971,8 +1056,8 @@ export default function Sidebar({
                           <div className="wa-global-user-handle">@{u.username}</div>
                           {u.about && <div className="wa-global-user-about">{u.about}</div>}
                         </div>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="wa-global-user-chat-btn"
                           onClick={() => handleConnectWithGlobalUser(u)}
                         >
@@ -987,13 +1072,13 @@ export default function Sidebar({
                 {/* Direct Connect option if user searches for an unadded @username */}
                 {showDirectChatOption && !globalUserResults.some(u => u.username?.toLowerCase() === cleanQ) && (
                   <div style={{ padding: '10px 12px', borderTop: '1px solid var(--wa-border)' }}>
-                    <div 
-                      className="wa-global-user-item" 
-                      style={{ 
-                        backgroundColor: 'var(--wa-bg-panel-secondary)', 
+                    <div
+                      className="wa-global-user-item"
+                      style={{
+                        backgroundColor: 'var(--wa-bg-panel-secondary)',
                         border: '1.5px solid var(--wa-green)',
                         borderRadius: 10,
-                        cursor: 'pointer' 
+                        cursor: 'pointer'
                       }}
                       onClick={() => handleConnectWithGlobalUser({ username: cleanQ, name: cleanQ })}
                     >
@@ -1007,8 +1092,8 @@ export default function Sidebar({
                           Start a new conversation
                         </div>
                       </div>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         className="wa-global-user-chat-btn"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1113,24 +1198,27 @@ export default function Sidebar({
 
       {/* Slide-out Profile Drawer (Edit Name, Bio & Avatar) */}
       {isProfileDrawerOpen && (
-        <div className="wa-profile-drawer">
+        <div className="wa-profile-drawer" style={{ zIndex: 2500 }}>
           <div className="wa-profile-drawer-header">
-            <button 
-              className="wa-icon-btn" 
+            <button
+              id="closeProfileDrawerBtn"
+              type="button"
+              className="wa-icon-btn wa-circle-action-btn"
               onClick={() => setIsProfileDrawerOpen(false)}
-              style={{ color: 'var(--wa-text-primary)' }}
-              title="Back"
+              style={{ color: '#ffffff', cursor: 'pointer' }}
+              title="Back to Chats"
+              aria-label="Back to Chats"
             >
               <ArrowLeft size={20} />
             </button>
-            <span>Profile</span>
+            <span style={{ fontSize: '17px', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>Profile</span>
           </div>
 
           <div className="wa-profile-drawer-body">
             {/* Avatar Uploader & Presets */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <label 
-                htmlFor="drawerAvatarInput" 
+              <label
+                htmlFor="drawerAvatarInput"
                 className="wa-profile-upload-circle"
                 style={{ width: 120, height: 120, marginBottom: 14 }}
                 title="Click to change profile picture"
@@ -1148,14 +1236,14 @@ export default function Sidebar({
                   <Camera size={26} />
                 </div>
               </label>
-              <input 
-                id="drawerAvatarInput" 
-                type="file" 
-                accept="image/*" 
-                onChange={handleDrawerFileUpload} 
-                style={{ display: 'none' }} 
+              <input
+                id="drawerAvatarInput"
+                type="file"
+                accept="image/*"
+                onChange={handleDrawerFileUpload}
+                style={{ display: 'none' }}
               />
-              
+
               {/* Gender Selection & Bitmoji Picker */}
               <div style={{ width: '100%', marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -1207,8 +1295,8 @@ export default function Sidebar({
                 </div>
                 <div className="wa-avatar-picker-chips">
                   {(GENDER_AVATARS[editGender] || AVATAR_PRESETS).map((p, i) => (
-                    <div 
-                      key={i} 
+                    <div
+                      key={i}
                       className={`wa-avatar-chip ${editAvatar === p ? 'selected' : ''}`}
                       onClick={() => setEditAvatar(p)}
                       title={`Bitmoji ${i + 1}`}
@@ -1240,9 +1328,9 @@ export default function Sidebar({
                 <span style={{ position: 'absolute', left: 12, top: 11, color: 'var(--wa-text-secondary)', fontWeight: 600, fontSize: '14px' }}>
                   @
                 </span>
-                <input 
-                  type="text" 
-                  className="wa-phone-number-field" 
+                <input
+                  type="text"
+                  className="wa-phone-number-field"
                   value={editUsername}
                   onChange={(e) => handleEditUsernameChange(e.target.value)}
                   placeholder="username"
@@ -1259,9 +1347,9 @@ export default function Sidebar({
               <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--wa-green-light)', display: 'block', marginBottom: 6 }}>
                 Your Name
               </label>
-              <input 
-                type="text" 
-                className="wa-phone-number-field" 
+              <input
+                type="text"
+                className="wa-phone-number-field"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder="Enter your name"
@@ -1277,9 +1365,9 @@ export default function Sidebar({
               <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--wa-green-light)', display: 'block', marginBottom: 6 }}>
                 About / Bio Status
               </label>
-              <input 
-                type="text" 
-                className="wa-phone-number-field" 
+              <input
+                type="text"
+                className="wa-phone-number-field"
                 value={editAbout}
                 onChange={(e) => setEditAbout(e.target.value)}
                 placeholder="Status"
@@ -1316,7 +1404,7 @@ export default function Sidebar({
             </div>
 
             {/* Save Button */}
-            <button 
+            <button
               className="wa-login-cta-btn"
               onClick={handleSaveDrawerProfile}
               disabled={!editName.trim() || editUsernameStatus === 'taken' || editUsernameStatus === 'invalid'}
@@ -1356,7 +1444,7 @@ export default function Sidebar({
                 </div>
                 <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--wa-text-primary)' }}>New Chat</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setIsAddContactOpen(false)}
                 className="wa-icon-btn"
                 style={{ width: 32, height: 32 }}
@@ -1387,8 +1475,8 @@ export default function Sidebar({
                 autoFocus
               />
               {modalSearchQuery && (
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setModalSearchQuery('')}
                   style={{ background: 'none', border: 'none', color: 'var(--wa-text-secondary)', cursor: 'pointer' }}
                 >
@@ -1495,8 +1583,8 @@ export default function Sidebar({
               <form onSubmit={handleAddContactSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 6 }}>
                 {/* Avatar Selection with Gender */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                  <div 
-                    className="wa-avatar" 
+                  <div
+                    className="wa-avatar"
                     style={{ width: 56, height: 56, border: '2px solid var(--wa-green)', boxShadow: 'var(--wa-shadow-md)' }}
                   >
                     <img src={newContactAvatar} alt="Contact Avatar" />
