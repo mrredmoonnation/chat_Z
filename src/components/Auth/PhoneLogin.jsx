@@ -557,32 +557,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
               <span style={{ lineHeight: 1.45 }}>{errorMsg}</span>
             </div>
-
-            {/* Quick 1-click fallback button if domain is not authorized in Firebase */}
-            {(errorMsg.includes('Domain not authorized') || errorMsg.includes('unauthorized-domain')) && (
-              <button
-                type="button"
-                id="instantLoginFallbackBtn"
-                onClick={() => handleInstantQuickLogin()}
-                style={{
-                  alignSelf: 'flex-start',
-                  marginTop: 4,
-                  backgroundColor: '#00a884',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '7px 14px',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                ⚡ Click here for Instant Direct Login
-              </button>
-            )}
           </div>
         )}
 
@@ -755,32 +729,6 @@ export default function PhoneLogin({ onLoginSuccess }) {
                 />
               </svg>
               <span>Continue with Google</span>
-            </button>
-
-            {/* 1-Click Instant Direct Login Button */}
-            <button
-              type="button"
-              id="instantDirectLoginBtn"
-              onClick={() => handleInstantQuickLogin()}
-              className="wa-login-cta-btn"
-              style={{
-                marginTop: 10,
-                background: 'rgba(0, 168, 132, 0.16)',
-                color: 'var(--wa-green-light)',
-                border: '1px solid rgba(0, 168, 132, 0.4)',
-                boxShadow: 'none',
-                height: 42,
-                fontSize: '13.5px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                borderRadius: 8
-              }}
-              title="1-Click Instant Login (No domain setup required)"
-            >
-              <span>⚡ 1-Click Instant Direct Login</span>
             </button>
 
 
