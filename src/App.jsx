@@ -1057,6 +1057,73 @@ export default function App() {
     return null;
   };
 
+  // Resolve all target identifier aliases for a contact to guarantee message/call delivery
+  const resolveTargetChannels = (contactOrId) => {
+    const targets = new Set();
+    if (!contactOrId) return [];
+
+    const contact = typeof contactOrId === 'string'
+      ? { id: contactOrId, username: contactOrId }
+      : contactOrId;
+
+    const addTarget = (raw) => {
+      if (!raw || typeof raw !== 'string') return;
+      const clean = cleanUsername(raw);
+      if (clean && clean !== 'user' && clean !== cleanUsername(currentUser?.username)) {
+        targets.add(clean);
+      }
+    };
+
+    // 1. Direct username
+    addTarget(contact.username);
+
+    // 2. Direct name if it's a valid handle
+    if (contact.name && isValidUsernameFormat(contact.name)) {
+      addTarget(contact.name);
+    }
+
+    // 3. otherUid or uid
+    addTarget(contact.otherUid);
+    addTarget(contact.uid);
+
+    // 4. Cleaned id (without wa_user_ or user_)
+    if (contact.id) {
+      if (contact.id.startsWith('wa_user_')) {
+        addTarget(contact.id.replace('wa_user_', ''));
+      } else if (contact.id.startsWith('user_')) {
+        addTarget(contact.id.replace('user_', ''));
+      } else if (!contact.id.startsWith('room_')) {
+        addTarget(contact.id);
+      }
+    }
+
+    // 5. phone & email
+    addTarget(contact.phone);
+    if (contact.email) {
+      addTarget(contact.email.split('@')[0]);
+    }
+
+    // 6. roomId (e.g. room_user_sonu_user_rahul or room_sonu_rahul)
+    const roomStr = contact.roomId || (contact.id?.startsWith('room_') ? contact.id : '');
+    if (roomStr && roomStr.startsWith('room_')) {
+      const parts = roomStr.replace('room_', '').split('_');
+      parts.forEach((p) => {
+        if (p && p !== 'user' && p !== cleanUsername(currentUser?.username) && p !== cleanUsername(currentUser?.uid)) {
+          addTarget(p);
+        }
+      });
+    }
+
+    // 7. participants array if present
+    if (Array.isArray(contact.participants)) {
+      contact.participants.forEach((p) => {
+        addTarget(p);
+      });
+    }
+
+    return Array.from(targets);
+  };
+
   // Send Message with Firestore real-time sync + Real-Time MQTT Relay + WebRTC P2P + Instant 0ms Optimistic UI
   const handleSendMessage = async (msgData) => {
     if (!activeContactId) return;
@@ -1248,6 +1315,9 @@ export default function App() {
       (targetContact?.id?.startsWith('wa_user_') ? targetContact.id.replace('wa_user_', '') : null) ||
       (targetContact?.otherUid ? targetContact.otherUid : null);
 
+    const primaryTarget = targetUsername || targetContact?.otherUid || targetContact?.uid || targetContact?.id || activeContactId;
+    const resolvedTargets = resolveTargetChannels(targetContact || activeContactId);
+
     const wirePayload = {
       type: 'CHAT_MESSAGE',
       message: newMsg,
@@ -1260,12 +1330,16 @@ export default function App() {
     // 6. Send over Real-Time MQTT Cloud Relay (both instant delivery AND retained offline inbox)
     const candidateTargets = Array.from(new Set([
       primaryTarget,
+      ...resolvedTargets,
       targetUsername,
       targetContact?.otherUid,
       targetContact?.uid,
       targetContact?.id,
-      targetContact?.phone
+      targetContact?.phone,
+      activeContactId
     ].map(t => (t ? cleanUsername(t) : '')).filter(Boolean)));
+
+    console.log('[Message Dispatch] Candidate delivery targets:', candidateTargets);
 
     candidateTargets.forEach((target) => {
       // Instant online channel
@@ -1621,69 +1695,6 @@ export default function App() {
     saveStoredContacts(updated);
     handleSelectContact(newGroup.id);
     setIsNewGroupOpen(false);
-  };
-
-  // Resolve all target identifier aliases for a contact to guarantee message/call delivery
-  const resolveTargetChannels = (contact) => {
-    const targets = new Set();
-    if (!contact) return [];
-
-    const addTarget = (raw) => {
-      if (!raw || typeof raw !== 'string') return;
-      const clean = cleanUsername(raw);
-      if (clean && clean !== 'user' && clean !== cleanUsername(currentUser?.username)) {
-        targets.add(clean);
-      }
-    };
-
-    // 1. Direct username
-    addTarget(contact.username);
-
-    // 2. Direct name if it's a valid handle
-    if (contact.name && isValidUsernameFormat(contact.name)) {
-      addTarget(contact.name);
-    }
-
-    // 3. otherUid or uid
-    addTarget(contact.otherUid);
-    addTarget(contact.uid);
-
-    // 4. Cleaned id (without wa_user_ or user_)
-    if (contact.id) {
-      if (contact.id.startsWith('wa_user_')) {
-        addTarget(contact.id.replace('wa_user_', ''));
-      } else if (contact.id.startsWith('user_')) {
-        addTarget(contact.id.replace('user_', ''));
-      } else if (!contact.id.startsWith('room_')) {
-        addTarget(contact.id);
-      }
-    }
-
-    // 5. phone & email
-    addTarget(contact.phone);
-    if (contact.email) {
-      addTarget(contact.email.split('@')[0]);
-    }
-
-    // 6. roomId (e.g. room_user_sonu_user_rahul or room_sonu_rahul)
-    const roomStr = contact.roomId || (contact.id?.startsWith('room_') ? contact.id : '');
-    if (roomStr && roomStr.startsWith('room_')) {
-      const parts = roomStr.replace('room_', '').split('_');
-      parts.forEach((p) => {
-        if (p && p !== 'user' && p !== cleanUsername(currentUser?.username) && p !== cleanUsername(currentUser?.uid)) {
-          addTarget(p);
-        }
-      });
-    }
-
-    // 7. participants array if present
-    if (Array.isArray(contact.participants)) {
-      contact.participants.forEach((p) => {
-        addTarget(p);
-      });
-    }
-
-    return Array.from(targets);
   };
 
   // Incoming Call Signals Handlers
