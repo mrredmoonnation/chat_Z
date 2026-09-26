@@ -237,11 +237,79 @@ export const getStoredContacts = () => {
         (c) => c.id !== 'contact_gf' && c.id !== 'group_family' && c.id !== 'contact_rahul'
       );
     }
-    // Ensure pappu_AI contact is present
-    const hasPappu = contacts.some((c) => c.id === PAPPU_AI_ID || c.username === 'pappu_ai');
-    if (!hasPappu) {
-      contacts = [PAPPU_AI_CONTACT, ...contacts];
+
+    // Identify any AI contact entry (whether old pappu_ai or sudo_sonu_ai)
+    const isBotEntry = (c) =>
+      c.id === PAPPU_AI_ID ||
+      c.id === 'pappu_ai' ||
+      c.id === 'sudo_sonu_ai' ||
+      c.username === 'pappu_ai' ||
+      c.username === 'sudo_sonu_ai' ||
+      c.name === 'pappu_AI' ||
+      c.name === 'sudo_sonu_Ai';
+
+    const aiIndices = [];
+    contacts.forEach((c, idx) => {
+      if (isBotEntry(c)) aiIndices.push(idx);
+    });
+
+    let existingAi = null;
+    if (aiIndices.length > 0) {
+      existingAi = contacts[aiIndices[0]];
+      // Remove any duplicates
+      contacts = contacts.filter((c, idx) => !aiIndices.includes(idx));
     }
+
+    // Migrate messages to sudo_sonu_Ai branding
+    const existingMessages = existingAi?.messages || [];
+    const migratedMessages = existingMessages.map((m) => {
+      const isFromBot =
+        m.senderId === PAPPU_AI_ID ||
+        m.senderUsername === 'pappu_ai' ||
+        m.senderUsername === 'sudo_sonu_ai' ||
+        m.senderName === 'pappu_AI' ||
+        m.senderName === 'sudo_sonu_Ai';
+
+      if (!isFromBot) return m;
+
+      // Replace old intro text if present
+      let text = m.text || '';
+      if (m.id === 'msg_pappu_intro' || text.includes('pappu_AI')) {
+        text = PAPPU_AI_CONTACT.messages[0].text;
+      }
+
+      return {
+        ...m,
+        senderId: PAPPU_AI_ID,
+        senderUsername: 'sudo_sonu_ai',
+        senderName: 'sudo_sonu_Ai',
+        senderAvatar: PAPPU_AI_CONTACT.avatar,
+        text
+      };
+    });
+
+    const finalAiContact = {
+      ...PAPPU_AI_CONTACT,
+      ...(existingAi || {}),
+      id: PAPPU_AI_ID,
+      username: PAPPU_AI_CONTACT.username,
+      name: PAPPU_AI_CONTACT.name,
+      avatar: PAPPU_AI_CONTACT.avatar,
+      about: PAPPU_AI_CONTACT.about,
+      isBot: true,
+      isOnline: true,
+      lastSeen: PAPPU_AI_CONTACT.lastSeen,
+      messages: migratedMessages.length > 0 ? migratedMessages : PAPPU_AI_CONTACT.messages
+    };
+
+    // Always place sudo_sonu_Ai at the top of the contacts list
+    contacts = [finalAiContact, ...contacts];
+
+    // Immediately persist migrated state to localStorage
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+    } catch (e) {}
+
     return contacts;
   } catch (e) {
     return [PAPPU_AI_CONTACT];

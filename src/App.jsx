@@ -175,9 +175,27 @@ export default function App() {
     }
 
     const list = [...roomContacts, ...uniqueNonRoom];
-    if (!list.some((c) => matchesContact(c, PAPPU_AI_ID) || c.username === 'pappu_ai')) {
-      const storedPappu = contacts.find((c) => matchesContact(c, PAPPU_AI_ID));
-      list.unshift(storedPappu || PAPPU_AI_CONTACT);
+    const isBotMatch = (c) => matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.id === 'pappu_ai' || c.username === 'pappu_ai' || c.username === 'sudo_sonu_ai' || c.name === 'pappu_AI' || c.name === 'sudo_sonu_Ai';
+
+    const aiIdx = list.findIndex(isBotMatch);
+    if (aiIdx === -1) {
+      const storedAi = contacts.find(isBotMatch);
+      const freshAi = storedAi
+        ? { ...storedAi, ...PAPPU_AI_CONTACT, messages: storedAi.messages?.length ? storedAi.messages : PAPPU_AI_CONTACT.messages }
+        : PAPPU_AI_CONTACT;
+      list.unshift(freshAi);
+    } else {
+      // Force-override branding on existing entry
+      list[aiIdx] = {
+        ...list[aiIdx],
+        id: PAPPU_AI_ID,
+        username: PAPPU_AI_CONTACT.username,
+        name: PAPPU_AI_CONTACT.name,
+        avatar: PAPPU_AI_CONTACT.avatar,
+        about: PAPPU_AI_CONTACT.about,
+        isBot: true,
+        isOnline: true
+      };
     }
 
     return list;
@@ -943,10 +961,14 @@ export default function App() {
       || (msgData.type === 'location' ? '📍 Live Location' : null)
       || 'Sent a message';
 
-    // Check if this chat is with pappu_AI Bot
+    // Check if this chat is with sudo_sonu_Ai Bot
     const isBotChat = activeContactId === PAPPU_AI_ID || 
+                      activeContactId === 'pappu_ai' ||
+                      activeContactId === 'sudo_sonu_ai' ||
                       targetContact?.id === PAPPU_AI_ID || 
                       targetContact?.username === 'pappu_ai' || 
+                      targetContact?.username === 'sudo_sonu_ai' ||
+                      targetContact?.name === 'sudo_sonu_Ai' ||
                       targetContact?.isBot;
 
     if (isBotChat) {
@@ -955,7 +977,7 @@ export default function App() {
       // Update local contacts with user message
       setContacts((prev) => {
         const updated = prev.map((c) => {
-          if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) {
+          if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') {
             return {
               ...c,
               messages: [...(c.messages || []), newMsg],
@@ -974,24 +996,24 @@ export default function App() {
       setTimeout(() => {
         setContacts((prev) =>
           prev.map((c) =>
-            (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) ? { ...c, isTyping: true } : c
+            (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') ? { ...c, isTyping: true } : c
           )
         );
       }, 350);
 
-      // Generate smart response after 1100ms
+      // Generate smart response after 800ms
       setTimeout(async () => {
         try {
           const aiReplyText = await generatePappuReply(msgData, targetContact?.messages || [], currentUser);
-          const replyId = 'msg_pappu_' + Date.now();
+          const replyId = 'msg_sudo_' + Date.now();
           const replyNowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const replyNowTs = Date.now();
 
           const aiReplyMsg = {
             id: replyId,
             senderId: PAPPU_AI_ID,
-            senderUsername: 'pappu_ai',
-            senderName: 'pappu_AI',
+            senderUsername: 'sudo_sonu_ai',
+            senderName: 'sudo_sonu_Ai',
             senderAvatar: PAPPU_AI_CONTACT.avatar,
             text: aiReplyText,
             time: replyNowTime,
@@ -1001,7 +1023,7 @@ export default function App() {
 
           setContacts((prev) => {
             const updated = prev.map((c) => {
-              if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) {
+              if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') {
                 return {
                   ...c,
                   isTyping: false,
@@ -1019,14 +1041,14 @@ export default function App() {
 
           sounds.playMessageReceived?.();
         } catch (err) {
-          console.warn('pappu_AI response notice:', err);
+          console.warn('sudo_sonu_Ai response notice:', err);
           setContacts((prev) =>
             prev.map((c) =>
-              (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID) ? { ...c, isTyping: false } : c
+              (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') ? { ...c, isTyping: false } : c
             )
           );
         }
-      }, 1100);
+      }, 800);
 
       return; // Handled locally, no network relay required
     }
@@ -1181,10 +1203,10 @@ export default function App() {
   // Delete entire chat conversation / contact
   const handleDeleteChat = (contactId) => {
     setContacts((prev) => {
-      const isPappu = contactId === PAPPU_AI_ID || contactId === 'pappu_ai';
+      const isAiBot = contactId === PAPPU_AI_ID || contactId === 'pappu_ai' || contactId === 'sudo_sonu_ai';
       let updated = prev.filter((c) => !matchesContact(c, contactId));
-      if (isPappu) {
-        // Reset pappu_AI to clean state
+      if (isAiBot) {
+        // Reset sudo_sonu_Ai to clean state
         updated = [{ ...PAPPU_AI_CONTACT, messages: [] }, ...updated];
       }
       saveStoredContacts(updated);
@@ -1668,7 +1690,7 @@ export default function App() {
     return <PhoneLogin onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const activeContact = activeContactId ? (mergedContacts.find((c) => c.id === activeContactId) || null) : null;
+  const activeContact = activeContactId ? (mergedContacts.find((c) => matchesContact(c, activeContactId) || c.id === activeContactId) || null) : null;
 
   return (
     <div className="wa-app-wrapper">

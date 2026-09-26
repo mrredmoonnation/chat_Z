@@ -659,24 +659,24 @@ export default function Sidebar({
 
           {/* Chat List */}
           <div className="wa-chat-list">
-            {/* Dedicated pappu_AI Assistant Banner Section */}
+            {/* Dedicated sudo_sonu_Ai Assistant Banner Section */}
             {!searchQuery.trim() && (
               <div
                 className={`wa-ai-bot-banner ${activeContactId === PAPPU_AI_ID ? 'active' : ''}`}
                 onClick={() => onSelectContact(PAPPU_AI_ID)}
-                title="Chat with pappu_AI (Smart Assistant)"
+                title="Chat with sudo_sonu_Ai (Advanced AI Assistant)"
                 id="pappuAiBanner"
               >
                 <div className="wa-ai-bot-avatar">
-                  <img src={PAPPU_AI_CONTACT.avatar} alt="pappu_AI" />
+                  <img src={PAPPU_AI_CONTACT.avatar} alt="sudo_sonu_Ai" />
                   <span className="wa-ai-pulse-dot" />
                 </div>
                 <div className="wa-ai-bot-info">
                   <div className="wa-ai-bot-title-row">
-                    <span className="wa-ai-bot-title">pappu_AI</span>
-                    <span className="wa-ai-badge">🤖 SMART AI</span>
+                    <span className="wa-ai-bot-title">sudo_sonu_Ai</span>
+                    <span className="wa-ai-badge">🧠 ADVANCED AI</span>
                   </div>
-                  <div className="wa-ai-bot-sub">Always Online • Ask anything, jokes, coding & help</div>
+                  <div className="wa-ai-bot-sub">Always Online • Deep knowledge, coding, GK & more</div>
                 </div>
                 <div className="wa-ai-bot-action-btn">
                   <Sparkles size={13} />
@@ -853,13 +853,13 @@ export default function Sidebar({
                         <div className="wa-chat-header-row">
                           <div className="wa-chat-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span>{highlightMatch(contact.name, q)}</span>
-                            {(contact.isBot || contact.id === PAPPU_AI_ID || contact.username === 'pappu_ai') && (
+                            {(contact.isBot || contact.id === PAPPU_AI_ID || contact.username === 'sudo_sonu_ai' || contact.username === 'pappu_ai') && (
                               <span className="wa-chat-ai-pill">
                                 <Bot size={11} />
                                 <span>AI</span>
                               </span>
                             )}
-                            {contact.username && !contact.isBot && contact.id !== PAPPU_AI_ID && (
+                            {contact.username && !contact.isBot && contact.id !== PAPPU_AI_ID && contact.username !== 'sudo_sonu_ai' && contact.username !== 'pappu_ai' && (
                               <span className="wa-chat-username-pill">@{contact.username}</span>
                             )}
                           </div>
