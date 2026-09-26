@@ -8,7 +8,7 @@ import {
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
-import { fetchCloudUsers, publishUserToCloud, pollCloudInbox, sendCloudInboxMessage } from './services/cloudRegistry';
+import { fetchCloudUsers, publishUserToCloud, pollCloudInbox, sendCloudInboxMessage, sendOfflineCloudMessage, refreshRealtimeCloud } from './services/cloudRegistry';
 import { useAuth } from './context/AuthContext';
 import { 
   getOrCreateOneToOneRoom, 
@@ -1137,22 +1137,27 @@ export default function App() {
       senderAvatar: currentUser?.photoURL || currentUser?.avatar || null
     };
 
-    // 6. Send over Real-Time MQTT Cloud Relay (for instant 0ms delivery if recipient is online)
-    const primaryTarget = targetUsername || targetContact?.otherUid;
-    if (primaryTarget) {
-      sendCloudInboxMessage(primaryTarget, wirePayload);
-    }
+    // 6. Send over Real-Time MQTT Cloud Relay (both instant delivery AND retained offline inbox)
+    const candidateTargets = Array.from(new Set([
+      primaryTarget,
+      targetUsername,
+      targetContact?.otherUid,
+      targetContact?.uid,
+      targetContact?.id,
+      targetContact?.phone
+    ].map(t => (t ? cleanUsername(t) : '')).filter(Boolean)));
 
-    // 6b. Always persist to Firestore Offline Inbox (ensures delivery even if recipient is offline)
-    if (primaryTarget) {
-      sendOfflineInboxMessage(primaryTarget, wirePayload);
-    }
-    if (targetContact?.otherUid && targetContact.otherUid !== primaryTarget) {
-      sendOfflineInboxMessage(targetContact.otherUid, wirePayload);
-    }
-    if (targetContact?.username && targetContact.username !== primaryTarget) {
-      sendOfflineInboxMessage(targetContact.username, wirePayload);
-    }
+    candidateTargets.forEach((target) => {
+      // Instant online channel
+      sendCloudInboxMessage(target, wirePayload);
+      // Retained offline channel (persists on broker until recipient comes online!)
+      sendOfflineCloudMessage(target, wirePayload);
+    });
+
+    // 6b. Also dispatch to Firestore Offline Inbox (if Firestore database is available)
+    candidateTargets.forEach((target) => {
+      sendOfflineInboxMessage(target, wirePayload);
+    });
 
     // 7. Send over WebRTC P2P (direct peer connection)
     const targetPeerId = targetUsername ? `wa_user_${targetUsername}` : activeContactId;
@@ -1251,8 +1256,11 @@ export default function App() {
       currentUser?.phone
     ].filter(Boolean);
 
-    // 1. Manually fetch and sync any pending offline inbox messages
+    // 1. Manually fetch and sync any pending offline inbox messages via Firestore
     await fetchOfflineInboxMessagesOnce(rawChannels, handleInboxMessages);
+
+    // 1b. Force refresh & resubscribe to Realtime Cloud MQTT (both instant and offline channels)
+    await refreshRealtimeCloud();
 
     // 2. If chat has a Firestore room, mark as read / sync
     const roomId = targetContact?.roomId || (activeContactId?.startsWith('room_') ? activeContactId : null);

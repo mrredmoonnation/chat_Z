@@ -30,11 +30,12 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
 
   cleanList.forEach((id) => currentSubscribedUsers.add(id));
 
-  // If already connected, just ensure new channels are subscribed
+  // If already connected, just ensure new channels are subscribed (both instant and offline channels)
   if (mqttClient && isConnected) {
     cleanList.forEach((id) => {
       try {
         mqttClient.subscribe(`chatz_v2/user/${id}`, { qos: 1 });
+        mqttClient.subscribe(`chatz_v2/offline/${id}/#`, { qos: 1 });
       } catch (e) {}
     });
     return;
@@ -65,15 +66,44 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
       try {
         const topic = message.destinationName;
         const payloadStr = message.payloadString;
+
+        // Ignore empty tombstone messages (used to clear retained broker messages)
+        if (!payloadStr || payloadStr.trim() === '') {
+          return;
+        }
+
         const data = JSON.parse(payloadStr);
 
-        // 1. Direct incoming 1-to-1 message for this user (any of their registered channels)
+        // 1. Direct incoming 1-to-1 instant message
         if (topic.startsWith('chatz_v2/user/')) {
           const targetTopicUser = topic.replace('chatz_v2/user/', '');
           if (currentSubscribedUsers.has(targetTopicUser)) {
             messageHandlers.forEach((handler) => {
               try { handler([data]); } catch (err) { console.error('Handler error:', err); }
             });
+          }
+        }
+        // 1b. Persistent Offline Message arrived (retained while this user was offline)
+        else if (topic.startsWith('chatz_v2/offline/')) {
+          const parts = topic.split('/');
+          const targetTopicUser = parts[2]; // chatz_v2 / offline / {username} / {msgId}
+
+          if (currentSubscribedUsers.has(targetTopicUser)) {
+            // Deliver the offline message to the app
+            messageHandlers.forEach((handler) => {
+              try { handler([data]); } catch (err) { console.error('Handler error:', err); }
+            });
+
+            // Once received, clear the retained message from broker so it will not duplicate
+            if (mqttClient && isConnected) {
+              try {
+                const clearMsg = new Paho.Message('');
+                clearMsg.destinationName = topic;
+                clearMsg.retained = true;
+                clearMsg.qos = 1;
+                mqttClient.send(clearMsg);
+              } catch (e) {}
+            }
           }
         }
         // 2. Directory discovery announcement
@@ -108,10 +138,11 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         isConnected = true;
         console.log('Realtime Cloud Connected via secure WebSocket');
 
-        // Subscribe to all of our private user inbox channels
+        // Subscribe to both real-time instant and persistent offline inboxes
         currentSubscribedUsers.forEach((id) => {
           try {
             mqttClient.subscribe(`chatz_v2/user/${id}`, { qos: 1 });
+            mqttClient.subscribe(`chatz_v2/offline/${id}/#`, { qos: 1 });
           } catch (e) {}
         });
 
@@ -126,6 +157,9 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
             const msg = new Paho.Message(JSON.stringify(item.payload));
             msg.destinationName = item.topic;
             msg.qos = 1;
+            if (item.retained) {
+              msg.retained = true;
+            }
             mqttClient.send(msg);
           } catch (e) {
             console.warn('Flush err:', e);
@@ -243,6 +277,64 @@ export const sendCloudInboxMessage = (targetUsername, messagePayload) => {
     pendingPublishQueue.push({ topic, payload: payloadWithMeta });
     return true;
   }
+};
+
+// Send persistent offline message (retained by cloud broker until recipient comes online)
+export const sendOfflineCloudMessage = (targetUsername, messagePayload) => {
+  if (!targetUsername || !messagePayload) return false;
+  const cleanTarget = cleanUsername(targetUsername);
+  if (!cleanTarget) return false;
+
+  const msgId = messagePayload.message?.id || ('m_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+  const topic = `chatz_v2/offline/${cleanTarget}/${msgId}`;
+
+  const payloadWithMeta = {
+    ...messagePayload,
+    offlineQueuedAt: Date.now()
+  };
+
+  if (mqttClient && isConnected) {
+    try {
+      const msg = new Paho.Message(JSON.stringify(payloadWithMeta));
+      msg.destinationName = topic;
+      msg.qos = 1;
+      msg.retained = true; // Retained permanently on broker until consumed!
+      mqttClient.send(msg);
+      console.log(`Offline message retained for @${cleanTarget} on ${topic}`);
+      return true;
+    } catch (err) {
+      console.warn('Failed to queue offline message, saving to pending queue:', err);
+      pendingPublishQueue.push({ topic, payload: payloadWithMeta, retained: true });
+      return false;
+    }
+  } else {
+    pendingPublishQueue.push({ topic, payload: payloadWithMeta, retained: true });
+    return true;
+  }
+};
+
+// Force manual refresh of realtime cloud connection & subscriptions
+export const refreshRealtimeCloud = async () => {
+  if (mqttClient && isConnected && currentSubscribedUsers.size > 0) {
+    currentSubscribedUsers.forEach((id) => {
+      try {
+        mqttClient.subscribe(`chatz_v2/user/${id}`, { qos: 1 });
+        mqttClient.subscribe(`chatz_v2/offline/${id}/#`, { qos: 1 });
+      } catch (e) {}
+    });
+
+    try {
+      const msg = new Paho.Message(JSON.stringify({ ping: Date.now() }));
+      msg.destinationName = 'chatz_v2/directory/query';
+      msg.qos = 0;
+      mqttClient.send(msg);
+    } catch (e) {}
+    return true;
+  } else if (currentSubscribedUsers.size > 0) {
+    initRealtimeCloud(Array.from(currentSubscribedUsers));
+    return true;
+  }
+  return false;
 };
 
 // Poll / Listen helper for backward compatibility with App.jsx
