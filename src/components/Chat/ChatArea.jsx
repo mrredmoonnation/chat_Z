@@ -9,7 +9,7 @@ import ChatInput from './ChatInput';
 import ContactDetailModal from '../Contact/ContactDetailModal';
 import WallpaperModal from './WallpaperModal';
 import { sounds } from '../../services/audioEffects';
-import { GENDER_AVATARS } from '../../services/store';
+import { GENDER_AVATARS, cleanUsername } from '../../services/store';
 
 export default function ChatArea({
   activeContact,
@@ -253,8 +253,21 @@ export default function ChatArea({
     ? `url(${activeContact.wallpaper.url})`
     : activeContact?.wallpaper?.css || undefined;
 
+  const displayHandle = activeContact?.username || 
+    (activeContact?.id?.startsWith('wa_user_') ? activeContact.id.replace('wa_user_', '') : null) ||
+    (activeContact?.id?.startsWith('user_') ? activeContact.id.replace('user_', '') : null) ||
+    cleanUsername(activeContact?.name);
+
   return (
-    <div className="wa-chat-area" ref={chatAreaRef}>
+    <div className="wa-chat-area" ref={chatAreaRef} style={{ position: 'relative', overflow: 'hidden' }}>
+      {/* Living Moving Video Wallpaper (Gen-Z Undulating Liquid Metallic Silk + Glowing Neon Mesh) */}
+      <div className="wa-login-moving-bg wa-chat-moving-bg" aria-hidden="true">
+        <div className="wa-liquid-video-layer" />
+        <div className="wa-liquid-orb orb-1" />
+        <div className="wa-liquid-orb orb-2" />
+        <div className="wa-liquid-grid-overlay" />
+      </div>
+
       {/* Subtle Liquid Ambient Wallpaper */}
       <div className="wa-doodle-bg" />
 
@@ -286,17 +299,17 @@ export default function ChatArea({
         )}
       </div>
 
-      {/* Header */}
-      <div className="wa-chat-header">
+      {/* Floating Pill Chat Header (Matching Photo 3) */}
+      <div className="wa-chat-header wa-chat-header-floating-pill">
         <div
           className="wa-chat-header-user clickable"
           onClick={() => setIsProfileModalOpen(true)}
           title="Click to view Contact Profile, User ID & Options"
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}
         >
           <button
             type="button"
-            className="wa-back-btn"
+            className="wa-back-btn wa-pill-back-btn"
             onClick={(e) => {
               e.stopPropagation();
               onBack && onBack();
@@ -304,22 +317,22 @@ export default function ChatArea({
             title="Back to all chats"
             aria-label="Back to all chats"
           >
-            <ArrowLeft size={22} />
+            <ArrowLeft size={20} />
           </button>
 
-          <div className="wa-avatar">
+          <div className="wa-avatar" style={{ width: 38, height: 38, flexShrink: 0 }}>
             <img src={activeContact.avatar} alt={activeContact.name} />
             {activeContact.isOnline && <div className="wa-avatar-badge" />}
           </div>
 
           <div className="wa-chat-header-meta" style={{ minWidth: 0, flex: 1 }}>
-            <div className="wa-chat-header-title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeContact.name}</span>
-              {activeContact.username && (
-                <span className="wa-chat-header-username" style={{ flexShrink: 0 }}>@{activeContact.username}</span>
+            <div className="wa-chat-header-title" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700, fontSize: 15, color: '#ffffff' }}>{activeContact.name}</span>
+              {displayHandle && (
+                <span className="wa-chat-header-username" style={{ flexShrink: 0 }}>@{displayHandle}</span>
               )}
             </div>
-            <div className={`wa-chat-header-status ${activeContact.isTyping ? 'typing' : activeContact.isOnline ? 'online' : ''}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className={`wa-chat-header-status ${activeContact.isTyping ? 'typing' : activeContact.isOnline ? 'online' : ''}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, color: '#4ade80' }}>
               {activeContact.isTyping
                 ? 'typing...'
                 : activeContact.isOnline
@@ -329,50 +342,50 @@ export default function ChatArea({
           </div>
         </div>
 
-        <div className="wa-chat-header-actions">
+        <div className="wa-chat-header-actions wa-pill-header-actions">
           <button
             id="startVideoCallBtn"
-            className="wa-call-action-btn"
+            className="wa-pill-action-btn"
             onClick={() => onStartCall && onStartCall(activeContact, true)}
             title="Video Call"
           >
-            <Video size={20} />
+            <Video size={19} />
           </button>
 
           <button
             id="startAudioCallBtn"
-            className="wa-call-action-btn"
+            className="wa-pill-action-btn"
             onClick={() => onStartCall && onStartCall(activeContact, false)}
             title="Voice Call"
           >
-            <Phone size={20} />
+            <Phone size={19} />
           </button>
 
           {/* Real-time Refresh & Sync Button */}
           <button
             id="refreshChatBtn"
             type="button"
-            className={`wa-call-action-btn wa-refresh-action-btn ${isRefreshing ? 'refreshing' : ''}`}
+            className={`wa-pill-action-btn ${isRefreshing ? 'refreshing' : ''}`}
             onClick={handleManualRefresh}
             title="Refresh & Sync Messages"
             aria-label="Refresh & Sync Messages"
           >
-            <RotateCw size={19} className={isRefreshing ? 'wa-spin-anim' : ''} />
+            <RotateCw size={18} className={isRefreshing ? 'wa-spin-anim' : ''} />
           </button>
 
           <button
             type="button"
-            className={`wa-icon-btn ${isSearchOpen ? 'active' : ''}`}
+            className={`wa-pill-action-btn ${isSearchOpen ? 'active' : ''}`}
             onClick={() => setIsSearchOpen(!isSearchOpen)}
             title="Search in Chat (Ctrl+F)"
             aria-label="Search in Chat"
           >
-            <Search size={19} />
+            <Search size={18} />
           </button>
 
           <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
-              className="wa-icon-btn"
+              className="wa-pill-action-btn"
               onClick={() => setShowOptionsMenu(!showOptionsMenu)}
               title="More Options"
             >

@@ -1969,6 +1969,15 @@ export default function App() {
 
   return (
     <div className="wa-app-wrapper">
+      {/* Living Moving Video Wallpaper (Gen-Z Undulating Liquid Metallic Silk + Glowing Neon Mesh) */}
+      <div className="wa-login-moving-bg" aria-hidden="true">
+        <div className="wa-liquid-video-layer" />
+        <div className="wa-liquid-orb orb-1" />
+        <div className="wa-liquid-orb orb-2" />
+        <div className="wa-liquid-orb orb-3" />
+        <div className="wa-liquid-grid-overlay" />
+      </div>
+
       <div className="wa-app-container">
         {/* Sidebar */}
         <div className={`wa-sidebar-wrapper ${showMobileChat ? 'mobile-hidden' : ''}`}>

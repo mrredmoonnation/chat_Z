@@ -4,7 +4,7 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck,
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  RotateCcw, Bot, Trash2, Settings, ShieldAlert
+  RotateCcw, Bot, Trash2, Settings, ShieldAlert, LayoutGrid, Plus
 } from 'lucide-react';
 import SettingsModal from '../Settings/SettingsModal';
 import {
@@ -401,112 +401,84 @@ export default function Sidebar({
   const showDirectChatOption = Boolean(cleanQ && cleanQ.length >= 2 && !hasExactContact && !isSelf);
 
   return (
-    <aside className="wa-sidebar">
+    <aside className="wa-sidebar" style={{ position: 'relative', overflow: 'hidden' }}>
+      {/* Living Moving Video Wallpaper (Gen-Z Undulating Liquid Metallic Silk + Glowing Neon Mesh) */}
+      <div className="wa-login-moving-bg wa-sidebar-moving-bg" aria-hidden="true">
+        <div className="wa-liquid-video-layer" />
+        <div className="wa-liquid-orb orb-1" />
+        <div className="wa-liquid-orb orb-2" />
+        <div className="wa-liquid-orb orb-3" />
+        <div className="wa-liquid-grid-overlay" />
+      </div>
+
       {/* Top Header */}
       <div className="wa-sidebar-header">
-        {/* Reference Image 1: "Hello, Michael" User Capsule Dock */}
+        {/* Reference Image 1: "Hello, Sonu sahani" User Capsule Dock */}
         <div
           className="wa-user-capsule"
-          title="Click to view & edit your Profile (Name & Bio)"
+          title="Click to view & edit your Profile"
           onClick={() => setIsProfileDrawerOpen(true)}
         >
           <div className="wa-avatar" style={{ position: 'relative' }}>
-            <img
-              src={currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.username || 'user'}`}
-              alt={currentUser?.name || 'User'}
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.username || 'user'}`;
-              }}
-            />
+            {currentUser?.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt={currentUser?.name || 'User'}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.username || 'user'}`;
+                }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, color: '#ffffff', background: '#25303f' }}>
+                {(currentUser?.name || currentUser?.username || 'S')[0].toUpperCase()}
+              </div>
+            )}
             <div
               style={{
                 position: 'absolute',
                 bottom: 0,
                 right: 0,
-                width: 14,
-                height: 14,
+                width: 12,
+                height: 12,
                 borderRadius: '50%',
-                backgroundColor: 'var(--wa-green)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#111b21',
-                border: '1.5px solid rgba(18, 24, 34, 0.9)'
+                backgroundColor: '#22c55e',
+                border: '2px solid #141a22',
+                boxShadow: '0 0 6px rgba(34, 197, 94, 0.7)'
               }}
-              title="Edit Profile"
-            >
-              <Camera size={9} />
-            </div>
+              title="Online"
+            />
           </div>
           <div className="wa-user-capsule-info">
             <span className="wa-user-capsule-greet">Hello,</span>
-            <span className="wa-user-capsule-name">{currentUser?.name || currentUser?.username || 'Sonu'}</span>
+            <span className="wa-user-capsule-name">{currentUser?.name || currentUser?.username || 'Sonu sahani'}</span>
           </div>
         </div>
 
         <div className="wa-header-actions">
-          {/* Internet P2P Partner Connect Button */}
+          {/* 1. Globe Button */}
           <button
             id="connectPartnerBtn"
             className={`wa-icon-btn ${partnerOnlineStatus === 'connected' ? 'active' : ''}`}
             onClick={onOpenPartnerModal}
             title={partnerOnlineStatus === 'connected' ? 'Connected Live with Partner over Internet' : 'Connect with Partner over Internet'}
-            style={{
-              color: partnerOnlineStatus === 'connected' ? 'var(--wa-green-light)' : 'var(--wa-text-secondary)',
-              position: 'relative'
-            }}
+            style={{ position: 'relative' }}
           >
-            <Globe size={20} />
-            {partnerOnlineStatus === 'connected' && (
-              <div style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--wa-green)', border: '1.5px solid var(--wa-bg-header)' }} />
-            )}
+            <Globe size={19} />
+            <div
+              style={{
+                position: 'absolute',
+                top: 7,
+                right: 7,
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                backgroundColor: partnerOnlineStatus === 'connected' ? '#22c55e' : '#94a3b8'
+              }}
+            />
           </button>
 
-          {/* New Chat / Add Contact button */}
-          <button
-            id="newChatBtn"
-            className="wa-icon-btn"
-            onClick={() => setIsAddContactOpen(true)}
-            title="New Chat / Add Contact"
-          >
-            <UserPlus size={20} />
-          </button>
-
-          {/* Communities / Group button */}
-          <button
-            id="newGroupBtn"
-            className="wa-icon-btn"
-            onClick={onOpenNewGroup}
-            title="New Group"
-          >
-            <Users size={20} />
-          </button>
-
-          {/* Status Tab shortcut */}
-          <button
-            className={`wa-icon-btn ${activeTab === 'status' ? 'active' : ''}`}
-            onClick={() => setActiveTab(activeTab === 'status' ? 'chats' : 'status')}
-            title="Status"
-          >
-            <CircleDashed size={20} />
-          </button>
-
-
-
-          {/* Settings Button */}
-          <button
-            id="settingsBtn"
-            type="button"
-            className="wa-icon-btn"
-            title="Settings & Privacy"
-            onClick={() => setIsSettingsOpen(true)}
-            style={{ color: 'var(--wa-text-secondary)' }}
-          >
-            <Settings size={19} />
-          </button>
-
-          {/* Reload / Refresh Button */}
+          {/* 2. Reload App Button */}
           <button
             id="reloadPageBtn"
             type="button"
@@ -514,9 +486,8 @@ export default function Sidebar({
             title="Reload App"
             onClick={() => {
               setIsReloading(true);
-              setTimeout(() => window.location.reload(), 400);
+              setTimeout(() => window.location.reload(), 300);
             }}
-            style={{ color: 'var(--wa-text-secondary)' }}
           >
             <RotateCcw
               size={18}
@@ -527,16 +498,26 @@ export default function Sidebar({
             />
           </button>
 
-          {/* 3 Dots Menu */}
+          {/* 3. Plus Button (+) */}
+          <button
+            id="newChatBtn"
+            className="wa-icon-btn"
+            onClick={() => setIsAddContactOpen(true)}
+            title="New contact / Add contact"
+          >
+            <Plus size={20} />
+          </button>
+
+          {/* 4. Menu Button (4-square grid / Apps icon from Photo 1) */}
           <div style={{ position: 'relative', zIndex: 1100 }}>
             <button
               id="sidebarMenuBtn"
               type="button"
               className="wa-icon-btn"
               onClick={() => setShowMenu(!showMenu)}
-              title="Menu"
+              title="Menu Options"
             >
-              <MoreVertical size={20} />
+              <LayoutGrid size={19} />
             </button>
 
             {showMenu && (
@@ -546,70 +527,152 @@ export default function Sidebar({
                   position: 'absolute',
                   top: '46px',
                   right: 0,
-                  backgroundColor: 'rgba(18, 24, 36, 0.94)',
+                  backgroundColor: 'rgba(18, 24, 32, 0.96)',
                   backdropFilter: 'blur(30px) saturate(190%)',
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
-                  borderRadius: 16,
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
-                  border: '1px solid rgba(255, 255, 255, 0.16)',
-                  width: 190,
+                  borderRadius: 18,
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  width: 215,
                   zIndex: 99999,
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  padding: '8px'
                 }}
               >
+                {/* 1. New contact */}
                 <div
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setIsAddContactOpen(true);
                     setShowMenu(false);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
                 >
-                  <UserPlus size={16} />
+                  <UserPlus size={18} color="#22c55e" />
                   <span>New contact</span>
                 </div>
 
+                {/* 2. New group */}
                 <div
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     onOpenNewGroup();
                     setShowMenu(false);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
                 >
-                  <Users size={16} />
+                  <Users size={18} color="#3b82f6" />
                   <span>New group</span>
                 </div>
 
-
+                {/* 3. Settings & Privacy */}
                 <div
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setIsSettingsOpen(true);
                     setShowMenu(false);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
                 >
-                  <Settings size={16} />
-                  <span>Settings</span>
+                  <Settings size={18} color="#cbd5e1" />
+                  <span>Settings & Privacy</span>
                 </div>
 
+                {/* 4. Light mode / Dark mode */}
                 <div
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     onToggleTheme();
                     setShowMenu(false);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
                 >
-                  {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                  {theme === 'dark' ? <Sun size={18} color="#f59e0b" /> : <Moon size={18} color="#a855f7" />}
                   <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
                 </div>
 
+                {/* 5. Reload App */}
                 <div
+                  className="wa-menu-dropdown-item"
+                  onClick={() => {
+                    window.location.reload();
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
+                >
+                  <RotateCcw size={18} color="#94a3b8" />
+                  <span>Reload App</span>
+                </div>
+
+                {/* 6. Log out */}
+                <div
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     onLogout();
                     setShowMenu(false);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--wa-danger)', display: 'flex', alignItems: 'center', gap: 10 }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    color: '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12
+                  }}
                 >
-                  <LogOut size={16} />
+                  <LogOut size={18} color="#ef4444" />
                   <span>Log out</span>
                 </div>
               </div>
