@@ -601,3 +601,135 @@ export const markFirestoreStorySeen = async (storyDocId, viewerUid, viewerName) 
     // Non-blocking
   }
 };
+
+/**
+ * -------------------------------------------------------------
+ * 6. PERSISTENT OFFLINE MESSAGE INBOX (OfflineInbox/{recipient}/Messages)
+ * Ensures 100% reliable message delivery even when recipient is offline.
+ * -------------------------------------------------------------
+ */
+
+// Save message to recipient's persistent offline inbox in Firestore
+export const sendOfflineInboxMessage = async (recipientIdOrUsername, wirePayload) => {
+  if (!recipientIdOrUsername || !wirePayload) return null;
+  const db = getFirebaseFirestore();
+  if (!db) return null;
+
+  const cleanRecipient = String(recipientIdOrUsername).toLowerCase().trim().replace(/^@+/, '').replace(/^wa_user_/, '');
+  if (!cleanRecipient) return null;
+
+  try {
+    const inboxRef = collection(db, 'OfflineInbox', cleanRecipient, 'Messages');
+    const docData = {
+      payload: wirePayload,
+      recipient: cleanRecipient,
+      createdAt: serverTimestamp()
+    };
+    const res = await addDoc(inboxRef, docData);
+    return res.id;
+  } catch (err) {
+    console.warn('OfflineInbox dispatch notice:', err);
+    return null;
+  }
+};
+
+// Listen and auto-consume offline inbox messages for the current user across all their channels
+export const subscribeToOfflineInbox = (userChannels = [], onMessageReceived) => {
+  const db = getFirebaseFirestore();
+  if (!db || !Array.isArray(userChannels) || userChannels.length === 0) return () => {};
+
+  const cleanChannels = Array.from(
+    new Set(
+      userChannels
+        .map((ch) => String(ch || '').toLowerCase().trim().replace(/^@+/, '').replace(/^wa_user_/, ''))
+        .filter(Boolean)
+    )
+  );
+
+  if (cleanChannels.length === 0) return () => {};
+
+  const unsubscribes = [];
+
+  cleanChannels.forEach((channel) => {
+    try {
+      const inboxRef = collection(db, 'OfflineInbox', channel, 'Messages');
+      const unsub = onSnapshot(
+        inboxRef,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            snapshot.docs.forEach(async (docSnap) => {
+              const data = docSnap.data();
+              if (data?.payload) {
+                try {
+                  onMessageReceived && onMessageReceived([data.payload]);
+                } catch (e) {
+                  console.error('Error handling offline inbox message:', e);
+                }
+                // Once delivered locally, delete the message from the inbox queue
+                try {
+                  await deleteDoc(docSnap.ref);
+                } catch (delErr) {
+                  console.warn('Error clearing consumed offline message:', delErr);
+                }
+              }
+            });
+          }
+        },
+        (err) => {
+          // Graceful fallback if database permissions or offline
+        }
+      );
+      unsubscribes.push(unsub);
+    } catch (e) {
+      console.warn('Error subscribing to channel:', channel, e);
+    }
+  });
+
+  return () => {
+    unsubscribes.forEach((unsub) => {
+      try { unsub(); } catch (e) {}
+    });
+  };
+};
+
+// Manually fetch and sync all pending offline messages (e.g., on Refresh button click)
+export const fetchOfflineInboxMessagesOnce = async (userChannels = [], onMessageReceived) => {
+  const db = getFirebaseFirestore();
+  if (!db || !Array.isArray(userChannels) || userChannels.length === 0) return 0;
+
+  const cleanChannels = Array.from(
+    new Set(
+      userChannels
+        .map((ch) => String(ch || '').toLowerCase().trim().replace(/^@+/, '').replace(/^wa_user_/, ''))
+        .filter(Boolean)
+    )
+  );
+
+  let totalFetched = 0;
+
+  for (const channel of cleanChannels) {
+    try {
+      const inboxRef = collection(db, 'OfflineInbox', channel, 'Messages');
+      const snap = await getDocs(inboxRef);
+      if (!snap.empty) {
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data();
+          if (data?.payload) {
+            try {
+              onMessageReceived && onMessageReceived([data.payload]);
+              totalFetched++;
+            } catch (e) {}
+            try {
+              await deleteDoc(docSnap.ref);
+            } catch (delErr) {}
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Manual offline inbox fetch notice:', err);
+    }
+  }
+
+  return totalFetched;
+};
+

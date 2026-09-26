@@ -630,6 +630,24 @@ input, textarea {
   color: var(--wa-green);
 }
 
+.wa-refresh-action-btn:hover {
+  color: var(--wa-green-light);
+}
+
+.wa-refresh-action-btn.refreshing {
+  color: var(--wa-green-light);
+  pointer-events: none;
+}
+
+@keyframes waSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.wa-spin-anim {
+  animation: waSpin 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Chat Messages Container */
 .wa-messages-container {
   flex: 1;

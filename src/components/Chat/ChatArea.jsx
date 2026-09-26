@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { 
   Phone, Video, Search, MoreVertical, Check, CheckCheck, 
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
-  ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot
+  ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot, RotateCw
 } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { sounds } from '../../services/audioEffects';
@@ -14,6 +14,7 @@ export default function ChatArea({
   partnerOnlineStatus = 'connected',
   onBack,
   onStartCall,
+  onRefreshChat,
   onSendMessage,
   onClearChat,
   onDeleteMessage,
@@ -22,6 +23,7 @@ export default function ChatArea({
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const chatAreaRef = useRef(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState(null);
   const [voiceSpeed, setVoiceSpeed] = useState(1);
   const [previewImage, setPreviewImage] = useState(null);
@@ -222,6 +224,20 @@ export default function ChatArea({
     else setVoiceSpeed(1);
   };
 
+  const handleManualRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      if (onRefreshChat) {
+        await onRefreshChat(activeContact);
+      }
+    } catch (err) {
+      console.warn('Manual refresh notice:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 650);
+    }
+  };
+
   return (
     <div className="wa-chat-area" ref={chatAreaRef}>
       {/* WhatsApp Doodle Wallpaper Pattern */}
@@ -282,6 +298,18 @@ export default function ChatArea({
             title="Voice Call"
           >
             <Phone size={20} />
+          </button>
+
+          {/* Real-time Refresh & Sync Button */}
+          <button
+            id="refreshChatBtn"
+            type="button"
+            className={`wa-call-action-btn wa-refresh-action-btn ${isRefreshing ? 'refreshing' : ''}`}
+            onClick={handleManualRefresh}
+            title="Refresh & Sync Messages"
+            aria-label="Refresh & Sync Messages"
+          >
+            <RotateCw size={19} className={isRefreshing ? 'wa-spin-anim' : ''} />
           </button>
 
           <button

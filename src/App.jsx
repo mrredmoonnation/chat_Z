@@ -21,7 +21,10 @@ import {
   subscribeToFirestoreStories,
   deleteFirestoreStory,
   deleteFirestoreStoryItem,
-  markFirestoreStorySeen
+  markFirestoreStorySeen,
+  sendOfflineInboxMessage,
+  subscribeToOfflineInbox,
+  fetchOfflineInboxMessagesOnce
 } from './services/firestoreChat';
 import { PAPPU_AI_ID, PAPPU_AI_CONTACT, generatePappuReply } from './services/pappuAI';
 import PhoneLogin from './components/Auth/PhoneLogin';
@@ -615,14 +618,21 @@ export default function App() {
       }
     });
 
-    pollCloudInbox(Array.from(userChannelsSet), handleInboxMessages);
+    const channelsList = Array.from(userChannelsSet);
+    pollCloudInbox(channelsList, handleInboxMessages);
+
+    // Persistent Firestore Offline Message Inbox (catches messages sent while offline)
+    const unsubOffline = subscribeToOfflineInbox(channelsList, handleInboxMessages);
 
     // Poll periodically for cloud user discovery only
     const interval = setInterval(() => {
       fetchCloudUsers();
     }, 8000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (unsubOffline) unsubOffline();
+    };
   }, [currentUser?.username, currentUser?.uid]);
 
   // Initialize Online P2P Internet Connection when logged in
@@ -1127,10 +1137,21 @@ export default function App() {
       senderAvatar: currentUser?.photoURL || currentUser?.avatar || null
     };
 
-    // 6. Send over Real-Time MQTT Cloud Relay (ONLY ONCE to primary target to prevent duplicates!)
+    // 6. Send over Real-Time MQTT Cloud Relay (for instant 0ms delivery if recipient is online)
     const primaryTarget = targetUsername || targetContact?.otherUid;
     if (primaryTarget) {
       sendCloudInboxMessage(primaryTarget, wirePayload);
+    }
+
+    // 6b. Always persist to Firestore Offline Inbox (ensures delivery even if recipient is offline)
+    if (primaryTarget) {
+      sendOfflineInboxMessage(primaryTarget, wirePayload);
+    }
+    if (targetContact?.otherUid && targetContact.otherUid !== primaryTarget) {
+      sendOfflineInboxMessage(targetContact.otherUid, wirePayload);
+    }
+    if (targetContact?.username && targetContact.username !== primaryTarget) {
+      sendOfflineInboxMessage(targetContact.username, wirePayload);
     }
 
     // 7. Send over WebRTC P2P (direct peer connection)
@@ -1217,6 +1238,30 @@ export default function App() {
       setActiveContactId(null);
       setShowMobileChat(false);
     }
+  };
+
+  // Handle manual chat refresh & sync (from the chat header refresh button)
+  const handleRefreshChat = async (targetContact) => {
+    sounds.playMessageSent?.();
+
+    const rawChannels = [
+      currentUser?.username,
+      currentUser?.uid,
+      currentUser?.id,
+      currentUser?.phone
+    ].filter(Boolean);
+
+    // 1. Manually fetch and sync any pending offline inbox messages
+    await fetchOfflineInboxMessagesOnce(rawChannels, handleInboxMessages);
+
+    // 2. If chat has a Firestore room, mark as read / sync
+    const roomId = targetContact?.roomId || (activeContactId?.startsWith('room_') ? activeContactId : null);
+    if (roomId && currentUser?.uid) {
+      markFirestoreRoomMessagesAsRead(roomId, currentUser.uid);
+    }
+
+    // 3. Re-query global cloud users
+    await fetchCloudUsers();
   };
 
   // Add new Story (supports multiple slides / updates + Firestore real-time sync)
@@ -1731,6 +1776,7 @@ export default function App() {
             partnerOnlineStatus={partnerOnlineStatus}
             onBack={handleBackToContacts}
             onStartCall={handleStartCall}
+            onRefreshChat={handleRefreshChat}
             onSendMessage={handleSendMessage}
             onClearChat={handleClearChat}
             onDeleteMessage={handleDeleteMessage}
