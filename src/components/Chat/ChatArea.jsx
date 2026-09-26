@@ -1,10 +1,11 @@
-import React, { useRef, useEffect, useState } from 'react';
 import { 
   Phone, Video, Search, MoreVertical, Check, CheckCheck, 
   Lock, ArrowLeft, Play, Pause, FileText, Download, X, Eye,
-  ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot, RotateCw
+  ChevronUp, ChevronDown, Sparkles, MapPin, ExternalLink, Trash2, Copy, Bot, RotateCw,
+  Info, ShieldAlert, ShieldCheck, User
 } from 'lucide-react';
 import ChatInput from './ChatInput';
+import ContactDetailModal from '../Contact/ContactDetailModal';
 import { sounds } from '../../services/audioEffects';
 import { GENDER_AVATARS } from '../../services/store';
 
@@ -12,6 +13,8 @@ export default function ChatArea({
   activeContact,
   currentUser,
   partnerOnlineStatus = 'connected',
+  isBlocked = false,
+  onToggleBlock,
   onBack,
   onStartCall,
   onRefreshChat,
@@ -28,6 +31,7 @@ export default function ChatArea({
   const [voiceSpeed, setVoiceSpeed] = useState(1);
   const [previewImage, setPreviewImage] = useState(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [partnerReaction, setPartnerReaction] = useState(null);
   const [activeBubbleMenuId, setActiveBubbleMenuId] = useState(null);
   const [showDeleteChatConfirm, setShowDeleteChatConfirm] = useState(false);
@@ -245,7 +249,12 @@ export default function ChatArea({
 
       {/* Header */}
       <div className="wa-chat-header">
-        <div className="wa-chat-header-user">
+        <div 
+          className="wa-chat-header-user clickable"
+          onClick={() => setIsProfileModalOpen(true)}
+          title="Click to view Contact Profile, User ID & Options"
+          style={{ cursor: 'pointer' }}
+        >
           <button 
             type="button" 
             className="wa-back-btn" 
@@ -349,6 +358,26 @@ export default function ChatArea({
                 <div
                   onClick={() => {
                     setShowOptionsMenu(false);
+                    setIsProfileModalOpen(true);
+                  }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <User size={15} color="var(--wa-text-secondary)" />
+                  <span>Contact info</span>
+                </div>
+                <div
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    onToggleBlock && onToggleBlock(activeContact);
+                  }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: isBlocked ? '#00a884' : 'var(--wa-danger)' }}
+                >
+                  {isBlocked ? <ShieldCheck size={15} /> : <ShieldAlert size={15} />}
+                  <span>{isBlocked ? 'Unblock contact' : 'Block contact'}</span>
+                </div>
+                <div
+                  onClick={() => {
+                    setShowOptionsMenu(false);
                     setShowClearChatConfirm(true);
                   }}
                   style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
@@ -446,6 +475,19 @@ export default function ChatArea({
           >
             <X size={18} />
           </button>
+        </div>
+      )}
+
+      {/* Blocked Contact Warning Banner */}
+      {isBlocked && (
+        <div 
+          className="wa-glass-blocked-banner"
+          onClick={() => onToggleBlock && onToggleBlock(activeContact)}
+          title="Click to unblock this contact"
+        >
+          <ShieldAlert size={16} />
+          <span>You blocked this contact. Tap here to unblock.</span>
+          <button type="button" className="wa-glass-unblock-badge">Unblock</button>
         </div>
       )}
 
@@ -741,6 +783,8 @@ export default function ChatArea({
         {/* Input Bar */}
         <ChatInput
           onSendMessage={onSendMessage}
+          isBlocked={isBlocked}
+          onUnblock={() => onToggleBlock && onToggleBlock(activeContact)}
           onTyping={(isTyping) => {
             if (typeof onSendMessage?.onTyping === 'function') {
               onSendMessage.onTyping(isTyping);
@@ -869,6 +913,17 @@ export default function ChatArea({
           </div>
         </div>
       )}
+      {/* Apple iOS 18 Glass Contact Detail Sheet */}
+      <ContactDetailModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        contact={activeContact}
+        isBlocked={isBlocked}
+        onToggleBlock={onToggleBlock}
+        onStartCall={onStartCall}
+        onClearChat={onClearChat}
+        onDeleteChat={onDeleteChat}
+      />
     </div>
   );
 }

@@ -10,7 +10,9 @@ const EMOJIS = [
 
 export default function ChatInput({
   onSendMessage,
-  onTyping
+  onTyping,
+  isBlocked = false,
+  onUnblock
 }) {
   const [text, setText] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
@@ -271,6 +273,13 @@ export default function ChatInput({
               <Send size={18} />
             </button>
           </div>
+        </div>
+      ) : isBlocked ? (
+        <div className="wa-glass-blocked-input-notice">
+          <span>You blocked this contact. Tap to unblock.</span>
+          <button type="button" onClick={onUnblock} className="wa-glass-unblock-pill">
+            Unblock
+          </button>
         </div>
       ) : (
         // Normal Message Input UI

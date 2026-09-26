@@ -4,8 +4,9 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck, 
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  RotateCcw, Bot, Trash2
+  RotateCcw, Bot, Trash2, Settings, ShieldAlert
 } from 'lucide-react';
+import SettingsModal from '../Settings/SettingsModal';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
   isUsernameAvailable, cleanUsername, 
@@ -51,12 +52,15 @@ export default function Sidebar({
   onAddContact,
   onStartChatRoom,
   onLogout,
-  onDeleteChat
+  onDeleteChat,
+  blockedUsers = [],
+  onUnblockUser
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [editName, setEditName] = useState(currentUser?.name || '');
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
@@ -466,6 +470,18 @@ export default function Sidebar({
 
 
 
+          {/* Settings Button */}
+          <button
+            id="settingsBtn"
+            type="button"
+            className="wa-icon-btn"
+            title="Settings & Privacy"
+            onClick={() => setIsSettingsOpen(true)}
+            style={{ color: 'var(--wa-text-secondary)' }}
+          >
+            <Settings size={19} />
+          </button>
+
           {/* Reload / Refresh Button */}
           <button
             id="reloadPageBtn"
@@ -537,6 +553,17 @@ export default function Sidebar({
                   <span>New group</span>
                 </div>
 
+
+                <div
+                  onClick={() => {
+                    setIsSettingsOpen(true);
+                    setShowMenu(false);
+                  }}
+                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+                >
+                  <Settings size={16} />
+                  <span>Settings</span>
+                </div>
 
                 <div
                   onClick={() => {
@@ -1615,6 +1642,18 @@ export default function Sidebar({
         </div>
       )}
 
+      {/* Apple iOS 18 Glass Settings Modal with Blocked Users Management */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        currentUser={currentUser}
+        blockedUsers={blockedUsers}
+        onUnblockUser={onUnblockUser}
+        onUpdateProfile={onUpdateProfile}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+        onLogout={onLogout}
+      />
     </aside>
   );
 }

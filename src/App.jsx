@@ -4,7 +4,8 @@ import {
   getStoredStories, saveStoredStories, getSettings, saveSettings,
   broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, 
   matchesContact, AVATAR_PRESETS, isValidUsernameFormat,
-  getStoredCallHistory, saveCallLog
+  getStoredCallHistory, saveCallLog,
+  getBlockedUsers, isUserBlocked, blockUser, unblockUser
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
@@ -77,6 +78,33 @@ export default function App() {
   const [activeContactId, setActiveContactId] = useState(null);
   const [stories, setStories] = useState(() => getStoredStories());
   const [settings, setSettings] = useState(() => getSettings());
+  const [blockedUsers, setBlockedUsers] = useState(() => getBlockedUsers());
+
+  // Listen to cross-tab updates for blocked users
+  useEffect(() => {
+    const unsub = subscribeToBroadcast((event, data) => {
+      if (event === 'BLOCKED_USERS_UPDATED') {
+        setBlockedUsers(getBlockedUsers());
+      }
+    });
+    return () => unsub?.();
+  }, []);
+
+  const handleToggleBlock = (contact) => {
+    if (!contact) return;
+    if (isUserBlocked(contact)) {
+      const updated = unblockUser(contact);
+      setBlockedUsers(updated);
+    } else {
+      const updated = blockUser(contact);
+      setBlockedUsers(updated);
+    }
+  };
+
+  const handleUnblockUser = (user) => {
+    const updated = unblockUser(user);
+    setBlockedUsers(updated);
+  };
 
   // Real-time Firestore ChatRooms subscription for current user
   useEffect(() => {
@@ -425,6 +453,15 @@ export default function App() {
       senderId: payload.senderId || senderPeerId,
       senderUsername: senderUsername || null
     };
+
+    // Drop messages from blocked users silently
+    if (
+      isUserBlocked(senderPeerId) || 
+      (senderUsername && isUserBlocked(senderUsername)) ||
+      (payload.senderId && isUserBlocked(payload.senderId))
+    ) {
+      return;
+    }
 
     if (senderUsername) {
       registerUsername(senderUsername, {
@@ -1773,6 +1810,8 @@ export default function App() {
             onStartChatRoom={handleStartChatRoom}
             onLogout={handleLogout}
             onDeleteChat={handleDeleteChat}
+            blockedUsers={blockedUsers}
+            onUnblockUser={handleUnblockUser}
           />
         </div>
 
@@ -1782,6 +1821,8 @@ export default function App() {
             activeContact={activeContact}
             currentUser={currentUser}
             partnerOnlineStatus={partnerOnlineStatus}
+            isBlocked={isUserBlocked(activeContact)}
+            onToggleBlock={handleToggleBlock}
             onBack={handleBackToContacts}
             onStartCall={handleStartCall}
             onRefreshChat={handleRefreshChat}

@@ -508,3 +508,74 @@ export const verifyAccountCredentials = (identifier, password) => {
 
   return { success: true, profile: normalizedProfile, email: account.email };
 };
+
+/**
+ * -------------------------------------------------------------
+ * BLOCKED USERS MANAGEMENT (WhatsApp-style privacy control)
+ * -------------------------------------------------------------
+ */
+
+export const getBlockedUsers = () => {
+  try {
+    const raw = localStorage.getItem('chatz_blocked_users_v1');
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const saveBlockedUsers = (list) => {
+  try {
+    const cleanList = Array.isArray(list) ? list : [];
+    localStorage.setItem('chatz_blocked_users_v1', JSON.stringify(cleanList));
+    broadcastChange('BLOCKED_USERS_UPDATED', { count: cleanList.length });
+    return cleanList;
+  } catch (e) {
+    return [];
+  }
+};
+
+export const isUserBlocked = (identifierOrContact) => {
+  if (!identifierOrContact) return false;
+  const blockedList = getBlockedUsers();
+  if (blockedList.length === 0) return false;
+
+  return blockedList.some((blocked) => matchesContact(blocked, identifierOrContact));
+};
+
+export const blockUser = (contactOrUser) => {
+  if (!contactOrUser) return getBlockedUsers();
+  const currentList = getBlockedUsers();
+
+  if (currentList.some((b) => matchesContact(b, contactOrUser))) {
+    return currentList;
+  }
+
+  const cleanName = contactOrUser.name || contactOrUser.displayName || 'User';
+  const cleanU = cleanUsername(contactOrUser.username || '');
+  const entry = {
+    id: contactOrUser.id || (cleanU ? `wa_user_${cleanU}` : `user_${Date.now()}`),
+    uid: contactOrUser.uid || contactOrUser.otherUid || null,
+    username: cleanU || null,
+    name: cleanName,
+    displayName: cleanName,
+    avatar: contactOrUser.avatar || contactOrUser.photoURL || AVATAR_PRESETS[0],
+    phone: contactOrUser.phone || '',
+    blockedAt: Date.now()
+  };
+
+  const updated = [entry, ...currentList];
+  saveBlockedUsers(updated);
+  return updated;
+};
+
+export const unblockUser = (identifierOrContact) => {
+  if (!identifierOrContact) return getBlockedUsers();
+  const currentList = getBlockedUsers();
+  const updated = currentList.filter((b) => !matchesContact(b, identifierOrContact));
+  saveBlockedUsers(updated);
+  return updated;
+};
+
