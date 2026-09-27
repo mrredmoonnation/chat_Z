@@ -4082,19 +4082,20 @@ textarea {
 
 /* pappu_AI Dedicated Banner in Sidebar */
 .wa-ai-bot-banner {
-  margin: 10px 12px 6px;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, rgba(0, 168, 132, 0.12), rgba(32, 44, 51, 0.7));
-  border: 1px solid rgba(0, 168, 132, 0.3);
+  margin: 8px 10px 6px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(0, 168, 132, 0.14), rgba(20, 28, 36, 0.85));
+  border: 1px solid rgba(74, 222, 128, 0.28);
   border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
   transition: all 0.25s ease;
   backdrop-filter: blur(8px);
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .wa-ai-bot-banner::before {
@@ -4128,8 +4129,8 @@ textarea {
 
 .wa-ai-bot-avatar {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
 }
 
@@ -4146,8 +4147,8 @@ textarea {
   position: absolute;
   bottom: 1px;
   right: 1px;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   background-color: var(--wa-green-light);
   border-radius: 50%;
   border: 2px solid var(--wa-bg-panel);
@@ -4157,51 +4158,62 @@ textarea {
 .wa-ai-bot-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .wa-ai-bot-title-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
+  min-width: 0;
 }
 
 .wa-ai-bot-title {
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--wa-text-primary);
   letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .wa-ai-badge {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 800;
   background: linear-gradient(135deg, var(--wa-green), #06cf9c);
   color: #111b21;
-  padding: 1px 7px;
-  border-radius: 12px;
+  padding: 1.5px 6px;
+  border-radius: 6px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .wa-ai-bot-sub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--wa-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 2px;
+  line-height: 1.25;
 }
 
 .wa-ai-bot-action-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(0, 168, 132, 0.2);
-  color: var(--wa-green-light);
-  border: 1px solid rgba(0, 168, 132, 0.4);
-  padding: 5px 10px;
-  border-radius: 20px;
-  font-size: 12px;
+  gap: 4px;
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11.5px;
   font-weight: 600;
   transition: all 0.2s ease;
   flex-shrink: 0;
@@ -5971,4 +5983,40 @@ textarea {
   inset: 0 !important;
   pointer-events: none !important;
   z-index: 0 !important;
+}
+
+/* Mobile Responsive Optimization for Floating Pill Chat Header & Action Buttons */
+@media (max-width: 768px) {
+  .wa-chat-header-floating-pill {
+    margin: 6px 8px 4px 8px !important;
+    padding: 4px 10px 4px 6px !important;
+    min-height: 50px !important;
+  }
+
+  .wa-desktop-only-action {
+    display: none !important;
+  }
+
+  .wa-pill-header-actions {
+    gap: 4px !important;
+  }
+
+  .wa-pill-action-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .wa-chat-header-username {
+    display: none !important;
+  }
+
+  .wa-chat-header-contact-name {
+    font-size: 14.5px !important;
+    max-width: 170px !important;
+  }
+
+  .wa-ai-bot-banner {
+    margin: 6px 8px 4px 8px !important;
+    padding: 7px 10px !important;
+  }
 }

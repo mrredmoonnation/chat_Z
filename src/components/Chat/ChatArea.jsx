@@ -337,11 +337,11 @@ export default function ChatArea({
             {activeContact.isOnline && <div className="wa-avatar-badge" />}
           </div>
 
-          <div className="wa-chat-header-meta" style={{ minWidth: 0, flex: 1 }}>
-            <div className="wa-chat-header-title" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700, fontSize: 15, color: '#ffffff' }}>{activeContact.name}</span>
+          <div className="wa-chat-header-meta" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+            <div className="wa-chat-header-title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+              <span className="wa-chat-header-contact-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700, fontSize: 15, color: '#ffffff', minWidth: 0, flexShrink: 1 }}>{activeContact.name}</span>
               {displayHandle && (
-                <span className="wa-chat-header-username" style={{ flexShrink: 0 }}>@{displayHandle}</span>
+                <span className="wa-chat-header-username">@{displayHandle}</span>
               )}
             </div>
             <div className={`wa-chat-header-status ${activeContact.isTyping ? 'typing' : activeContact.isOnline ? 'online' : ''}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, color: '#4ade80' }}>
@@ -377,7 +377,7 @@ export default function ChatArea({
           <button
             id="refreshChatBtn"
             type="button"
-            className={`wa-pill-action-btn ${isRefreshing ? 'refreshing' : ''}`}
+            className={`wa-pill-action-btn wa-desktop-only-action ${isRefreshing ? 'refreshing' : ''}`}
             onClick={handleManualRefresh}
             title="Refresh & Sync Messages"
             aria-label="Refresh & Sync Messages"
@@ -387,7 +387,7 @@ export default function ChatArea({
 
           <button
             type="button"
-            className={`wa-pill-action-btn ${isSearchOpen ? 'active' : ''}`}
+            className={`wa-pill-action-btn wa-desktop-only-action ${isSearchOpen ? 'active' : ''}`}
             onClick={() => setIsSearchOpen(!isSearchOpen)}
             title="Search in Chat (Ctrl+F)"
             aria-label="Search in Chat"
@@ -463,6 +463,60 @@ export default function ChatArea({
                 >
                   <User size={16} color="var(--wa-text-secondary)" />
                   <span style={{ fontWeight: 500 }}>Contact info</span>
+                </button>
+
+                {/* Search in chat option */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    setIsSearchOpen(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: '#f1f5f9',
+                    textAlign: 'left'
+                  }}
+                >
+                  <Search size={16} color="var(--wa-text-secondary)" />
+                  <span style={{ fontWeight: 500 }}>Search in chat</span>
+                </button>
+
+                {/* Refresh messages option */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    handleManualRefresh();
+                  }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: '#f1f5f9',
+                    textAlign: 'left'
+                  }}
+                >
+                  <RotateCw size={16} color="var(--wa-text-secondary)" />
+                  <span style={{ fontWeight: 500 }}>Refresh messages</span>
                 </button>
 
                 {/* 2. Chat Wallpaper */}

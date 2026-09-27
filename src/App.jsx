@@ -18,7 +18,7 @@ import {
   getStoredStories, saveStoredStories, getSettings, saveSettings,
   broadcastChange, subscribeToBroadcast, registerUsername, cleanUsername, 
   matchesContact, AVATAR_PRESETS, isValidUsernameFormat,
-  getStoredCallHistory, saveCallLog,
+  getStoredCallHistory, saveCallLog, markAllMissedCallsSeen,
   getBlockedUsers, isUserBlocked, blockUser, unblockUser
 } from './services/store';
 import { sounds } from './services/audioEffects';
@@ -1824,6 +1824,11 @@ export default function App() {
     callStartTimeRef.current = null;
   };
 
+  const handleCallsSeen = () => {
+    const updated = markAllMissedCallsSeen();
+    if (updated) setCallHistory(updated);
+  };
+
   // Start Call (Multi-channel Internet Cloud Signal + P2P)
   const handleStartCall = async (contact, isVideo) => {
     if (!contact) return;
@@ -2046,6 +2051,7 @@ export default function App() {
             onDeleteChat={handleDeleteChat}
             blockedUsers={blockedUsers}
             onUnblockUser={handleUnblockUser}
+            onCallsSeen={handleCallsSeen}
           />
         </div>
 

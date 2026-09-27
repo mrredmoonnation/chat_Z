@@ -12,7 +12,7 @@ import {
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
   isUsernameAvailable, cleanUsername,
   isValidUsernameFormat, registerUsername, searchUsersByUsername,
-  subscribeToBroadcast, matchesContact
+  subscribeToBroadcast, matchesContact, markAllMissedCallsSeen
 } from '../../services/store';
 import { fetchCloudUsers } from '../../services/cloudRegistry';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
@@ -55,7 +55,8 @@ export default function Sidebar({
   onLogout,
   onDeleteChat,
   blockedUsers = [],
-  onUnblockUser
+  onUnblockUser,
+  onCallsSeen
 }) {
   const [activeTab, setActiveTab] = useState('chats'); // 'chats', 'status', 'calls'
   const [searchQuery, setSearchQuery] = useState('');
@@ -284,7 +285,15 @@ export default function Sidebar({
 
   // Calls History - from App.jsx (persistent localStorage)
   const callsHistory = callHistory || [];
-  const missedCallCount = callsHistory.filter((c) => c.direction === 'missed').length;
+  const missedCallCount = callsHistory.filter((c) => c.direction === 'missed' && !c.seen).length;
+
+  // When user switches to 'calls' tab, mark all missed calls as seen and clear the red badge
+  useEffect(() => {
+    if (activeTab === 'calls') {
+      markAllMissedCallsSeen();
+      if (onCallsSeen) onCallsSeen();
+    }
+  }, [activeTab]);
 
   // Highlight matching text helper
   const highlightMatch = (text, query) => {
@@ -893,9 +902,9 @@ export default function Sidebar({
                 <div className="wa-ai-bot-info">
                   <div className="wa-ai-bot-title-row">
                     <span className="wa-ai-bot-title">Mr_red_moon_Ai</span>
-                    <span className="wa-ai-badge">🧠 ADVANCED AI</span>
+                    <span className="wa-ai-badge">AI BOT</span>
                   </div>
-                  <div className="wa-ai-bot-sub">Always Online • Deep knowledge, coding, GK & more</div>
+                  <div className="wa-ai-bot-sub">Always Online • Deep knowledge & smart chat</div>
                 </div>
                 <div className="wa-ai-bot-action-btn">
                   <Sparkles size={13} />

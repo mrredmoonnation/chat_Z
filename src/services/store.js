@@ -23,9 +23,33 @@ export const saveCallLog = (logEntry) => {
   if (!logEntry) return;
   try {
     const history = getStoredCallHistory();
-    // Keep most recent 200 calls
-    const updated = [logEntry, ...history].slice(0, 200);
+    const entryWithSeen = {
+      ...logEntry,
+      seen: logEntry.direction === 'missed' ? false : true
+    };
+    const updated = [entryWithSeen, ...history].slice(0, 200);
     localStorage.setItem(CALL_HISTORY_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    return [];
+  }
+};
+
+// Mark all missed calls as seen so badge count resets
+export const markAllMissedCallsSeen = () => {
+  try {
+    const history = getStoredCallHistory();
+    let hasUnseen = false;
+    const updated = history.map((c) => {
+      if (c.direction === 'missed' && !c.seen) {
+        hasUnseen = true;
+        return { ...c, seen: true };
+      }
+      return c;
+    });
+    if (hasUnseen) {
+      localStorage.setItem(CALL_HISTORY_KEY, JSON.stringify(updated));
+    }
     return updated;
   } catch (e) {
     return [];
