@@ -916,64 +916,6 @@ export default function Sidebar({
 
           {/* Chat List */}
           <div className="wa-chat-list">
-            {/* Dedicated Mr_red_moon_Ai Assistant Banner Section */}
-            {!searchQuery.trim() && (
-              <div
-                className={`wa-ai-bot-banner ${activeContactId === PAPPU_AI_ID ? 'active' : ''}`}
-                onClick={() => onSelectContact(PAPPU_AI_ID)}
-                title="Chat with Mr_red_moon_Ai (Advanced AI Assistant)"
-                id="pappuAiBanner"
-              >
-                <div className="wa-ai-bot-avatar">
-                  <img src={PAPPU_AI_CONTACT.avatar} alt="Mr_red_moon_Ai" />
-                  <span className="wa-ai-pulse-dot" />
-                </div>
-                <div className="wa-ai-bot-info">
-                  <div className="wa-ai-bot-title-row">
-                    <span className="wa-ai-bot-title">Mr_red_moon_Ai</span>
-                    <span className="wa-ai-badge">AI BOT</span>
-                  </div>
-                  <div className="wa-ai-bot-sub">Always Online • Deep knowledge & smart chat</div>
-                </div>
-                <div className="wa-ai-bot-action-btn">
-                  <Sparkles size={13} />
-                  <span>Chat</span>
-                </div>
-              </div>
-            )}
-
-            {/* Dedicated Tech Community & Ideas Discussion Banner */}
-            {!searchQuery.trim() && (
-              <div
-                className={`wa-ai-bot-banner wa-community-banner ${activeContactId === COMMUNITY_HUB_ID ? 'active' : ''}`}
-                onClick={() => onSelectContact(COMMUNITY_HUB_ID)}
-                title="Open Tech Community & Ideas Discussion"
-                id="techCommunityBanner"
-                style={{
-                  marginTop: 6,
-                  background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.16) 0%, rgba(16, 185, 129, 0.10) 100%)',
-                  border: '1px solid rgba(56, 189, 248, 0.35)',
-                  boxShadow: activeContactId === COMMUNITY_HUB_ID ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none'
-                }}
-              >
-                <div className="wa-ai-bot-avatar">
-                  <img src={COMMUNITY_CONTACT.avatar} alt="Tech Community" />
-                  <span className="wa-ai-pulse-dot" style={{ backgroundColor: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }} />
-                </div>
-                <div className="wa-ai-bot-info">
-                  <div className="wa-ai-bot-title-row">
-                    <span className="wa-ai-bot-title" style={{ color: '#f8fafc' }}>Tech Community & Ideas</span>
-                    <span className="wa-community-pill" style={{ fontSize: 9.5, padding: '2px 7px' }}>💡 COMMUNITY</span>
-                  </div>
-                  <div className="wa-ai-bot-sub" style={{ color: '#94a3b8' }}>Public Group • Share new ideas & discuss issues</div>
-                </div>
-                <div className="wa-ai-bot-action-btn" style={{ borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8' }}>
-                  <Users size={13} />
-                  <span>Join</span>
-                </div>
-              </div>
-            )}
-
             {filteredContacts.length === 0 ? (
               !searchQuery.trim() ? (
                 <div className="wa-empty-contacts-state">
