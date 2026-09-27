@@ -6,6 +6,7 @@ const BG_COLORS = ['#00a884', '#7c3aed', '#2563eb', '#db2777', '#d97706', '#dc26
 
 export default function StatusView({
   currentUser,
+  contacts = [],
   stories = [],
   onAddStory,
   onReplyToStory,
@@ -27,6 +28,19 @@ export default function StatusView({
   const [newBgColor, setNewBgColor] = useState(BG_COLORS[0]);
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newCaption, setNewCaption] = useState('');
+
+  // Helper to match and resolve contact display name and avatar
+  const resolveContactMeta = (story) => {
+    if (!story) return { name: 'Friend', avatar: '' };
+    const matchingContact = contacts.find((c) =>
+      (story.uid && (c.uid === story.uid || c.id === story.uid)) ||
+      (story.contactId && (c.id === story.contactId || c.uid === story.contactId)) ||
+      (story.username && (c.username === story.username || c.id === `wa_user_${story.username}`))
+    );
+    const resolvedName = matchingContact?.name || (story.contactName && story.contactName !== 'My Status' ? story.contactName : null) || story.username || 'Friend';
+    const resolvedAvatar = matchingContact?.avatar || story.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${story.username || story.uid || 'contact'}`;
+    return { name: resolvedName, avatar: resolvedAvatar };
+  };
 
   // Distinguish my story from other contacts' stories
   const myStory = stories.find(
@@ -281,26 +295,29 @@ export default function StatusView({
             No recent updates from contacts
           </div>
         ) : (
-          otherStories.map((s) => (
-            <div
-              key={s.id}
-              className="wa-chat-item"
-              onClick={() => openStory(s)}
-            >
-              <div className="wa-status-avatar-ring">
-                <div className="wa-avatar">
-                  <img src={s.avatar} alt={s.contactName} />
+          otherStories.map((s) => {
+            const meta = resolveContactMeta(s);
+            return (
+              <div
+                key={s.id || s.uid || s.username}
+                className="wa-chat-item"
+                onClick={() => openStory({ ...s, contactName: meta.name, avatar: meta.avatar })}
+              >
+                <div className="wa-status-avatar-ring">
+                  <div className="wa-avatar">
+                    <img src={meta.avatar} alt={meta.name} />
+                  </div>
                 </div>
-              </div>
 
-              <div className="wa-chat-info">
-                <div className="wa-chat-name">{s.contactName}</div>
-                <div className="wa-chat-time" style={{ textAlign: 'left' }}>
-                  {s.timeText || 'Today'}
+                <div className="wa-chat-info">
+                  <div className="wa-chat-name">{meta.name}</div>
+                  <div className="wa-chat-time" style={{ textAlign: 'left' }}>
+                    {s.timeText || 'Today'}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

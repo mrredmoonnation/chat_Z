@@ -454,7 +454,7 @@ export const publishFirestoreStory = async (currentUser, storyItem) => {
     const storyData = {
       uid: uid,
       contactId: uid,
-      contactName: currentUser.displayName || currentUser.name || currentUser.username || 'My Status',
+      contactName: currentUser.displayName || currentUser.name || currentUser.username || 'User',
       username: currentUser.username || '',
       avatar: currentUser.photoURL || currentUser.avatar || '',
       timestamp: serverTimestamp(),
@@ -466,8 +466,8 @@ export const publishFirestoreStory = async (currentUser, storyItem) => {
     await setDoc(userStoryRef, storyData, { merge: true });
     return storyData;
   } catch (err) {
-    console.error('Error publishing story to Firestore:', err);
-    throw err;
+    console.warn('Firestore story publish notice:', err);
+    return null;
   }
 };
 
@@ -498,10 +498,10 @@ export const subscribeToFirestoreStories = (currentUid, onStoriesUpdate, onError
             stories.push({
               id: d.id,
               uid: data.uid,
-              contactId: isMe ? 'user' : data.uid,
-              contactName: isMe ? 'My Status' : (data.contactName || data.username || 'Friend'),
+              contactId: isMe ? 'user' : (data.uid || data.username || d.id),
+              contactName: isMe ? 'My Status' : (data.contactName && data.contactName !== 'My Status' ? data.contactName : (data.username || 'Friend')),
               username: data.username || '',
-              avatar: data.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${data.uid}`,
+              avatar: data.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${data.uid || data.username || d.id}`,
               timeText: data.timeText || 'Today',
               timestamp: data.updatedAt?.toMillis?.() || data.timestamp?.toMillis?.() || now,
               items: activeItems

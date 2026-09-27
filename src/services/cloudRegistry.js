@@ -38,6 +38,11 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         mqttClient.subscribe(`chatz_v2/offline/${id}/#`, { qos: 1 });
       } catch (e) {}
     });
+    try {
+      mqttClient.subscribe('chatz_v2/stories/broadcast', { qos: 1 });
+      mqttClient.subscribe('chatz_v2/stories/user/+', { qos: 1 });
+      mqttClient.subscribe('chatz_v2/stories/query', { qos: 0 });
+    } catch (e) {}
     return;
   }
 
@@ -124,6 +129,16 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
             } catch (e) {}
           }
         }
+        // 4. Story real-time updates and retained stories from any user
+        else if (topic === 'chatz_v2/stories/broadcast' || topic.startsWith('chatz_v2/stories/user/')) {
+          if (data) {
+            window.dispatchEvent(new CustomEvent('wa_cloud_story_received', { detail: data }));
+          }
+        }
+        // 5. Stories query: someone asked for all active stories
+        else if (topic === 'chatz_v2/stories/query') {
+          broadcastMyLocalStories();
+        }
       } catch (err) {
         console.warn('Error processing incoming cloud message:', err);
       }
@@ -149,6 +164,11 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         // Subscribe to global user directory discovery
         mqttClient.subscribe('chatz_v2/directory/announce', { qos: 0 });
         mqttClient.subscribe('chatz_v2/directory/query', { qos: 0 });
+
+        // Subscribe to stories broadcast, wildcard user stories, and stories query
+        mqttClient.subscribe('chatz_v2/stories/broadcast', { qos: 1 });
+        mqttClient.subscribe('chatz_v2/stories/user/+', { qos: 1 });
+        mqttClient.subscribe('chatz_v2/stories/query', { qos: 0 });
 
         // Flush any queued outgoing messages
         while (pendingPublishQueue.length > 0) {
@@ -176,6 +196,12 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
             }
           } catch (e) {}
         }
+
+        // Broadcast any active local story and query stories from peers
+        try {
+          broadcastMyLocalStories();
+          queryCloudStories();
+        } catch (e) {}
       },
       onFailure: (err) => {
         isConnected = false;
@@ -342,4 +368,178 @@ export const refreshRealtimeCloud = async () => {
 // Poll / Listen helper for backward compatibility with App.jsx
 export const pollCloudInbox = (myUsername, onMessagesReceived) => {
   initRealtimeCloud(myUsername, onMessagesReceived);
+};
+
+// Internal helper to broadcast own active stories
+function broadcastMyLocalStories() {
+  try {
+    const rawUser = localStorage.getItem('chatz_user_v1');
+    if (!rawUser) return;
+    const user = JSON.parse(rawUser);
+    if (!user) return;
+
+    const rawStories = localStorage.getItem('chatz_stories_v1');
+    if (!rawStories) return;
+    const stories = JSON.parse(rawStories);
+    const now = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    const myStory = stories.find((s) =>
+      s.contactId === 'user' ||
+      (user.uid && s.uid === user.uid) ||
+      (user.id && s.contactId === user.id) ||
+      (user.username && s.username === user.username)
+    );
+
+    if (myStory?.items?.length) {
+      const activeItems = myStory.items.filter((it) => (now - (it.timestamp || it.createdAt || now)) < TWENTY_FOUR_HOURS);
+      if (activeItems.length > 0) {
+        publishStoryToCloud(user, { ...myStory, items: activeItems });
+      }
+    }
+  } catch (e) {
+    console.warn('Error broadcasting local stories:', e);
+  }
+}
+
+// Publish or update a user's story to the real-time cloud (broadcast + retained broker message)
+export const publishStoryToCloud = (currentUser, storyItemOrFullStory) => {
+  if (!currentUser) return false;
+  const username = cleanUsername(currentUser.username || currentUser.id || currentUser.uid);
+  if (!username) return false;
+
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+  let activeItems = [];
+  try {
+    const raw = localStorage.getItem('chatz_stories_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const myStory = parsed.find(
+        (s) =>
+          s.contactId === 'user' ||
+          (currentUser.uid && s.uid === currentUser.uid) ||
+          (currentUser.id && s.contactId === currentUser.id) ||
+          (currentUser.username && s.username === currentUser.username)
+      );
+      if (myStory?.items) {
+        activeItems = myStory.items.filter((it) => (now - (it.timestamp || it.createdAt || now)) < TWENTY_FOUR_HOURS);
+      }
+    }
+  } catch (e) {}
+
+  if (storyItemOrFullStory) {
+    if (Array.isArray(storyItemOrFullStory.items)) {
+      activeItems = storyItemOrFullStory.items.filter((it) => (now - (it.timestamp || it.createdAt || now)) < TWENTY_FOUR_HOURS);
+    } else if (storyItemOrFullStory.type || storyItemOrFullStory.id) {
+      const exists = activeItems.some((it) => it.id === storyItemOrFullStory.id);
+      if (!exists) {
+        activeItems.push(storyItemOrFullStory);
+      }
+    }
+  }
+
+  if (activeItems.length === 0) return false;
+
+  const targetAvatar = currentUser.photoURL || currentUser.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${username}`;
+  const displayName = currentUser.displayName || currentUser.name || currentUser.username || username;
+
+  const payload = {
+    type: 'STORY_UPDATE',
+    storyId: `story_${username}`,
+    uid: currentUser.uid || currentUser.id || `wa_user_${username}`,
+    username: currentUser.username || username,
+    contactId: currentUser.uid || currentUser.id || `wa_user_${username}`,
+    contactName: displayName,
+    avatar: targetAvatar,
+    timeText: 'Just now',
+    timestamp: now,
+    items: activeItems
+  };
+
+  const broadcastTopic = 'chatz_v2/stories/broadcast';
+  const retainedTopic = `chatz_v2/stories/user/${username}`;
+
+  if (mqttClient && isConnected) {
+    try {
+      // 1. Instant broadcast to online peers
+      const bMsg = new Paho.Message(JSON.stringify(payload));
+      bMsg.destinationName = broadcastTopic;
+      bMsg.qos = 1;
+      mqttClient.send(bMsg);
+
+      // 2. Retained per-user message on broker so newly connecting peers receive it
+      const rMsg = new Paho.Message(JSON.stringify(payload));
+      rMsg.destinationName = retainedTopic;
+      rMsg.qos = 1;
+      rMsg.retained = true;
+      mqttClient.send(rMsg);
+      return true;
+    } catch (err) {
+      console.warn('Failed to publish story to cloud, queueing:', err);
+      pendingPublishQueue.push({ topic: broadcastTopic, payload });
+      pendingPublishQueue.push({ topic: retainedTopic, payload, retained: true });
+      return false;
+    }
+  } else {
+    pendingPublishQueue.push({ topic: broadcastTopic, payload });
+    pendingPublishQueue.push({ topic: retainedTopic, payload, retained: true });
+    return true;
+  }
+};
+
+// Delete story or specific item from real-time cloud
+export const deleteStoryFromCloud = (currentUser, storyId, itemId = null) => {
+  if (!currentUser) return false;
+  const username = cleanUsername(currentUser.username || currentUser.id || currentUser.uid);
+  if (!username) return false;
+
+  if (itemId) {
+    // Single slide item removed: republish active remaining items
+    publishStoryToCloud(currentUser);
+    return true;
+  }
+
+  const payload = {
+    type: 'STORY_DELETE',
+    uid: currentUser.uid || currentUser.id || `wa_user_${username}`,
+    username: currentUser.username || username,
+    storyId: storyId || `story_${username}`
+  };
+
+  if (mqttClient && isConnected) {
+    try {
+      // Broadcast deletion
+      const bMsg = new Paho.Message(JSON.stringify(payload));
+      bMsg.destinationName = 'chatz_v2/stories/broadcast';
+      bMsg.qos = 1;
+      mqttClient.send(bMsg);
+
+      // Clear retained story on broker
+      const clearMsg = new Paho.Message('');
+      clearMsg.destinationName = `chatz_v2/stories/user/${username}`;
+      clearMsg.retained = true;
+      clearMsg.qos = 1;
+      mqttClient.send(clearMsg);
+      return true;
+    } catch (err) {
+      console.warn('Failed to delete story from cloud:', err);
+      return false;
+    }
+  }
+  return false;
+};
+
+// Query active stories from all online users
+export const queryCloudStories = () => {
+  const topic = 'chatz_v2/stories/query';
+  if (mqttClient && isConnected) {
+    try {
+      const msg = new Paho.Message(JSON.stringify({ query: 'stories', time: Date.now() }));
+      msg.destinationName = topic;
+      msg.qos = 0;
+      mqttClient.send(msg);
+    } catch (e) {}
+  }
 };

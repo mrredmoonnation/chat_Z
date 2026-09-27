@@ -1270,6 +1270,7 @@ export default function Sidebar({
       {activeTab === 'status' && (
         <StatusView
           currentUser={currentUser}
+          contacts={contacts}
           stories={stories}
           onAddStory={onAddStory}
           onReplyToStory={onReplyToStory}

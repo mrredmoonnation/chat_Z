@@ -23,7 +23,11 @@ import {
 } from './services/store';
 import { sounds } from './services/audioEffects';
 import { OnlineP2PService } from './services/onlineP2P';
-import { fetchCloudUsers, publishUserToCloud, pollCloudInbox, sendCloudInboxMessage, sendOfflineCloudMessage, refreshRealtimeCloud } from './services/cloudRegistry';
+import { 
+  fetchCloudUsers, publishUserToCloud, pollCloudInbox, 
+  sendCloudInboxMessage, sendOfflineCloudMessage, refreshRealtimeCloud,
+  publishStoryToCloud, deleteStoryFromCloud, queryCloudStories
+} from './services/cloudRegistry';
 import { useAuth } from './context/AuthContext';
 import { 
   getOrCreateOneToOneRoom, 
@@ -150,6 +154,98 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser?.uid]);
 
+  // Helper to merge local, Firestore, and Realtime Cloud stories cleanly
+  const mergeStoryCollection = (existingList = [], incomingList = [], user = null) => {
+    const now = Date.now();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    const isOwner = (s) => {
+      if (!s || !user) return false;
+      if (s.contactId === 'user') return true;
+      if (user.uid && (s.uid === user.uid || s.contactId === user.uid || s.id === user.uid)) return true;
+      if (user.id && (s.uid === user.id || s.contactId === user.id || s.id === user.id)) return true;
+      if (user.username && s.username && cleanUsername(user.username) === cleanUsername(s.username)) return true;
+      return false;
+    };
+
+    const incomingArray = Array.isArray(incomingList) ? incomingList : (incomingList ? [incomingList] : []);
+    const map = new Map();
+
+    // 1. Process existing stories
+    (existingList || []).forEach((s) => {
+      if (!s) return;
+      const isMe = isOwner(s);
+      const key = isMe ? 'user' : (s.uid || s.username || s.id || s.contactId);
+      if (!key) return;
+
+      const validItems = (s.items || []).filter((it) => (now - (it.timestamp || it.createdAt || now)) < TWENTY_FOUR_HOURS);
+      if (validItems.length > 0) {
+        map.set(key, {
+          ...s,
+          contactId: isMe ? 'user' : (s.contactId === 'user' ? (s.uid || s.username || s.id) : (s.contactId || s.uid || s.username)),
+          contactName: isMe ? 'My Status' : (s.contactName && s.contactName !== 'My Status' ? s.contactName : (s.username || 'Friend')),
+          items: validItems
+        });
+      }
+    });
+
+    // 2. Merge incoming stories
+    incomingArray.forEach((inc) => {
+      if (!inc) return;
+      const isMe = isOwner(inc);
+      const key = isMe ? 'user' : (inc.uid || inc.username || inc.id || inc.contactId);
+      if (!key) return;
+
+      const validIncItems = (inc.items || []).filter((it) => (now - (it.timestamp || it.createdAt || now)) < TWENTY_FOUR_HOURS);
+      if (validIncItems.length === 0) return;
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          id: inc.id || `story_${key}`,
+          uid: inc.uid || (isMe ? (user?.uid || user?.id) : key),
+          username: inc.username || '',
+          contactId: isMe ? 'user' : (inc.contactId === 'user' ? (inc.uid || inc.username || inc.id) : (inc.contactId || key)),
+          contactName: isMe ? 'My Status' : (inc.contactName && inc.contactName !== 'My Status' ? inc.contactName : (inc.username || 'Friend')),
+          avatar: inc.avatar || (isMe ? (user?.photoURL || user?.avatar) : `https://api.dicebear.com/7.x/adventurer/svg?seed=${key}`),
+          timeText: inc.timeText || 'Just now',
+          timestamp: inc.timestamp || now,
+          items: validIncItems
+        });
+      } else {
+        // Merge items without duplicates by item id
+        const itemMap = new Map();
+        existing.items.forEach((it) => {
+          if (it?.id) itemMap.set(it.id, it);
+        });
+        validIncItems.forEach((it) => {
+          if (it?.id) itemMap.set(it.id, it);
+        });
+        const combinedItems = Array.from(itemMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+        map.set(key, {
+          ...existing,
+          ...inc,
+          contactId: isMe ? 'user' : (existing.contactId === 'user' ? key : (existing.contactId || key)),
+          contactName: isMe ? 'My Status' : (inc.contactName && inc.contactName !== 'My Status' ? inc.contactName : existing.contactName),
+          avatar: inc.avatar || existing.avatar,
+          timestamp: Math.max(existing.timestamp || 0, inc.timestamp || 0),
+          items: combinedItems
+        });
+      }
+    });
+
+    const merged = Array.from(map.values());
+    // Sort: current user's story first, then newest updates descending
+    merged.sort((a, b) => {
+      if (a.contactId === 'user') return -1;
+      if (b.contactId === 'user') return 1;
+      return (b.timestamp || 0) - (a.timestamp || 0);
+    });
+
+    return merged;
+  };
+
   // Real-time Firestore Stories / Status sync across all devices & users
   useEffect(() => {
     const uid = currentUser?.uid || currentUser?.id;
@@ -158,9 +254,12 @@ export default function App() {
     const unsubscribe = subscribeToFirestoreStories(
       uid,
       (syncedStories) => {
-        if (syncedStories) {
-          setStories(syncedStories);
-          saveStoredStories(syncedStories);
+        if (syncedStories && syncedStories.length > 0) {
+          setStories((prev) => {
+            const merged = mergeStoryCollection(prev, syncedStories, currentUser);
+            saveStoredStories(merged);
+            return merged;
+          });
         }
       },
       (err) => {
@@ -169,6 +268,48 @@ export default function App() {
     );
     return () => unsubscribe();
   }, [currentUser?.uid, currentUser?.id]);
+
+  // Real-time Cloud Stories (MQTT broadcast and retained updates across all devices)
+  useEffect(() => {
+    const handleCloudStory = (e) => {
+      const data = e.detail;
+      if (!data) return;
+
+      if (data.type === 'STORY_DELETE') {
+        const delUsername = data.username;
+        const delUid = data.uid;
+        const delStoryId = data.storyId;
+
+        setStories((prev) => {
+          const updated = prev.filter((s) => {
+            if (delStoryId && s.id === delStoryId) return false;
+            if (delUid && (s.uid === delUid || s.contactId === delUid)) return false;
+            if (delUsername && (s.username === delUsername || s.contactId === delUsername)) return false;
+            return true;
+          });
+          saveStoredStories(updated);
+          return updated;
+        });
+        return;
+      }
+
+      if (data.type === 'STORY_UPDATE' || (data.items && Array.isArray(data.items))) {
+        setStories((prev) => {
+          const merged = mergeStoryCollection(prev, data, currentUser);
+          saveStoredStories(merged);
+          return merged;
+        });
+      }
+    };
+
+    window.addEventListener('wa_cloud_story_received', handleCloudStory);
+    // Query active stories when user logs in or mounts
+    queryCloudStories();
+
+    return () => {
+      window.removeEventListener('wa_cloud_story_received', handleCloudStory);
+    };
+  }, [currentUser]);
 
   // Merge real-time Firestore rooms with local contacts without duplicates
   const mergedContacts = React.useMemo(() => {
@@ -1597,17 +1738,24 @@ export default function App() {
     await fetchCloudUsers();
   };
 
-  // Add new Story (supports multiple slides / updates + Firestore real-time sync)
+  // Add new Story (supports multiple slides / updates + Realtime Cloud & Firestore sync)
   const handleAddStory = async (item) => {
     const existingIndex = stories.findIndex((s) => s.contactId === 'user');
     let updated;
+    const now = Date.now();
+    const userAvatar = currentUser?.photoURL || currentUser?.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${currentUser?.username || 'user'}`;
+    const userUid = currentUser?.uid || currentUser?.id || `wa_user_${currentUser?.username || 'user'}`;
+    const userUsername = currentUser?.username || '';
+
     if (existingIndex >= 0) {
       const existing = stories[existingIndex];
       const updatedUserStory = {
         ...existing,
-        contactName: currentUser?.displayName || currentUser?.name || 'My Status',
-        avatar: currentUser?.photoURL || currentUser?.avatar,
-        timestamp: Date.now(),
+        uid: userUid,
+        username: userUsername,
+        contactName: 'My Status',
+        avatar: userAvatar,
+        timestamp: now,
         timeText: 'Just now',
         items: [...(existing.items || []), item]
       };
@@ -1615,11 +1763,13 @@ export default function App() {
       updated[existingIndex] = updatedUserStory;
     } else {
       const newStory = {
-        id: 'story_user_' + Date.now(),
+        id: 'story_user_' + now,
+        uid: userUid,
+        username: userUsername,
         contactId: 'user',
-        contactName: currentUser?.displayName || currentUser?.name || 'My Status',
-        avatar: currentUser?.photoURL || currentUser?.avatar,
-        timestamp: Date.now(),
+        contactName: 'My Status',
+        avatar: userAvatar,
+        timestamp: now,
         timeText: 'Just now',
         items: [item]
       };
@@ -1628,21 +1778,25 @@ export default function App() {
     setStories(updated);
     saveStoredStories(updated);
 
-    // Sync to Firestore so ALL other users on all devices can see it in real-time!
+    // Sync to Realtime Cloud (MQTT broadcast + broker retained) AND Firestore
     if (currentUser) {
+      publishStoryToCloud(currentUser, item);
       try {
-        await publishFirestoreStory(currentUser, item);
+        publishFirestoreStory(currentUser, item).catch(() => {});
       } catch (err) {
-        console.warn('Firestore story publish error:', err);
+        console.warn('Firestore story publish notice:', err);
       }
     }
   };
 
   // Delete entire story
   const handleDeleteStory = async (storyId) => {
-    const updated = stories.filter((s) => s.id !== storyId);
+    const updated = stories.filter((s) => s.id !== storyId && s.contactId !== 'user');
     setStories(updated);
     saveStoredStories(updated);
+    if (currentUser) {
+      deleteStoryFromCloud(currentUser, storyId);
+    }
     const uid = currentUser?.uid || currentUser?.id;
     if (uid) {
       deleteFirestoreStory(uid);
@@ -1653,7 +1807,7 @@ export default function App() {
   const handleDeleteStoryItem = async (storyId, itemId) => {
     const updated = stories
       .map((s) => {
-        if (s.id === storyId) {
+        if (s.id === storyId || s.contactId === 'user') {
           const remainingItems = (s.items || []).filter((item) => item.id !== itemId);
           return {
             ...s,
@@ -1666,6 +1820,9 @@ export default function App() {
 
     setStories(updated);
     saveStoredStories(updated);
+    if (currentUser) {
+      deleteStoryFromCloud(currentUser, storyId, itemId);
+    }
     const uid = currentUser?.uid || currentUser?.id;
     if (uid) {
       deleteFirestoreStoryItem(uid, itemId);
