@@ -20,6 +20,7 @@ import { fetchCloudUsers } from '../../services/cloudRegistry';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
 import { compressAvatar } from '../../services/imageUtils';
 import { PAPPU_AI_ID, PAPPU_AI_CONTACT } from '../../services/pappuAI';
+import { COMMUNITY_HUB_ID, COMMUNITY_CONTACT } from '../../services/communityHub';
 import StatusView from '../Status/StatusView';
 
 const DRAWER_BIO_PRESETS = [
@@ -894,7 +895,7 @@ export default function Sidebar({
                 className={`wa-filter-pill-btn ${categoryFilter === 'groups' ? 'active' : ''}`}
                 onClick={() => setCategoryFilter('groups')}
               >
-                Groups
+                👥 Groups & Community
               </button>
               <button
                 type="button"
@@ -937,6 +938,38 @@ export default function Sidebar({
                 <div className="wa-ai-bot-action-btn">
                   <Sparkles size={13} />
                   <span>Chat</span>
+                </div>
+              </div>
+            )}
+
+            {/* Dedicated Tech Community & Ideas Discussion Banner */}
+            {!searchQuery.trim() && (
+              <div
+                className={`wa-ai-bot-banner wa-community-banner ${activeContactId === COMMUNITY_HUB_ID ? 'active' : ''}`}
+                onClick={() => onSelectContact(COMMUNITY_HUB_ID)}
+                title="Open Tech Community & Ideas Discussion"
+                id="techCommunityBanner"
+                style={{
+                  marginTop: 6,
+                  background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.16) 0%, rgba(16, 185, 129, 0.10) 100%)',
+                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                  boxShadow: activeContactId === COMMUNITY_HUB_ID ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none'
+                }}
+              >
+                <div className="wa-ai-bot-avatar">
+                  <img src={COMMUNITY_CONTACT.avatar} alt="Tech Community" />
+                  <span className="wa-ai-pulse-dot" style={{ backgroundColor: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }} />
+                </div>
+                <div className="wa-ai-bot-info">
+                  <div className="wa-ai-bot-title-row">
+                    <span className="wa-ai-bot-title" style={{ color: '#f8fafc' }}>Tech Community & Ideas</span>
+                    <span className="wa-community-pill" style={{ fontSize: 9.5, padding: '2px 7px' }}>💡 COMMUNITY</span>
+                  </div>
+                  <div className="wa-ai-bot-sub" style={{ color: '#94a3b8' }}>Public Group • Share new ideas & discuss issues</div>
+                </div>
+                <div className="wa-ai-bot-action-btn" style={{ borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8' }}>
+                  <Users size={13} />
+                  <span>Join</span>
                 </div>
               </div>
             )}

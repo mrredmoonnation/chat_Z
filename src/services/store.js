@@ -1,5 +1,6 @@
 // State Management, Persistence, Cross-Tab/Device Realtime Broadcast
 import { PAPPU_AI_CONTACT, PAPPU_AI_ID } from './pappuAI';
+import { COMMUNITY_HUB_ID, COMMUNITY_CONTACT, getStoredCommunityMessages } from './communityHub';
 
 const STORAGE_KEY = 'chatz_contacts_v1';
 const USER_KEY = 'chatz_user_v1';
@@ -371,8 +372,30 @@ export const getStoredContacts = () => {
       messages: migratedMessages.length > 0 ? migratedMessages : PAPPU_AI_CONTACT.messages
     };
 
-    // Always place Mr_red_moon_Ai at the top of the contacts list
-    contacts = [finalAiContact, ...contacts];
+    // Ensure Tech Community room is always seeded
+    const isComm = (c) => c.id === COMMUNITY_HUB_ID || c.isCommunity;
+    const commIndex = contacts.findIndex(isComm);
+    let existingComm = null;
+    if (commIndex !== -1) {
+      existingComm = contacts[commIndex];
+      contacts = contacts.filter((c, idx) => idx !== commIndex);
+    }
+    const commMessages = getStoredCommunityMessages();
+    const finalCommunityContact = {
+      ...COMMUNITY_CONTACT,
+      ...(existingComm || {}),
+      id: COMMUNITY_HUB_ID,
+      username: COMMUNITY_CONTACT.username,
+      name: COMMUNITY_CONTACT.name,
+      avatar: COMMUNITY_CONTACT.avatar,
+      about: COMMUNITY_CONTACT.about,
+      isCommunity: true,
+      isGroup: true,
+      messages: commMessages.length > 0 ? commMessages : COMMUNITY_CONTACT.messages
+    };
+
+    // Always place Mr_red_moon_Ai and Tech Community at the top of the contacts list
+    contacts = [finalAiContact, finalCommunityContact, ...contacts];
 
     // Immediately persist migrated state to localStorage
     try {
@@ -381,7 +404,7 @@ export const getStoredContacts = () => {
 
     return contacts;
   } catch (e) {
-    return [PAPPU_AI_CONTACT];
+    return [PAPPU_AI_CONTACT, COMMUNITY_CONTACT];
   }
 };
 
