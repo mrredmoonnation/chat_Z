@@ -152,7 +152,7 @@ export default function QRCodeModal({
           .then((url) => setQrDataUrl(url))
           .catch((e) => console.error('QR Fallback error:', e));
       });
-  }, [isOpen, activeUser?.username, activeUser?.uid, currentUsername, displayName, shareableUrl]);
+  }, [isOpen, shareableUrl, currentUsername]);
 
   // Handle Camera Scanner Lifecycle
   useEffect(() => {
