@@ -17,7 +17,7 @@ import { searchFirestoreUsers } from '../../services/firestoreChat';
  * 2. Deep link URLs: https://domain/?chat=username&name=... or #chat=...
  * 3. Plain handles: @username or username
  */
-export function parseScannedQR(text) {
+function parseScannedQR(text) {
   if (!text || typeof text !== 'string') return null;
   const trimmed = text.trim();
 
