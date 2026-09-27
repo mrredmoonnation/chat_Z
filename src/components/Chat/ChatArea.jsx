@@ -52,7 +52,7 @@ export default function ChatArea({
       if (!e.target.closest('.wa-bubble-menu-popover') && !e.target.closest('.wa-bubble-menu-trigger')) {
         setActiveBubbleMenuId(null);
       }
-      if (!e.target.closest('.wa-chat-header-actions')) {
+      if (!e.target.closest('.wa-chat-header-actions') && !e.target.closest('.wa-chat-options-portal')) {
         setShowOptionsMenu(false);
       }
     };
@@ -404,72 +404,163 @@ export default function ChatArea({
 
             {showOptionsMenu && ReactDOM.createPortal(
               <div
+                className="wa-chat-options-portal"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   position: 'fixed',
                   top: optionsMenuPos.top,
                   right: optionsMenuPos.right,
-                  backgroundColor: 'rgba(18, 24, 36, 0.97)',
-                  backdropFilter: 'blur(30px) saturate(190%)',
-                  WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                  backgroundColor: 'rgba(16, 23, 34, 0.96)',
+                  backdropFilter: 'blur(32px) saturate(200%)',
+                  WebkitBackdropFilter: 'blur(32px) saturate(200%)',
                   borderRadius: 16,
-                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 1px 1px rgba(255, 255, 255, 0.15)',
-                  border: '1px solid rgba(255, 255, 255, 0.16)',
-                  width: 200,
+                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 1px 1px rgba(255, 255, 255, 0.16)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  width: 210,
                   zIndex: 2147483647,
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  padding: '6px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2
                 }}
               >
-                <div
+                {/* 1. Contact info */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setShowOptionsMenu(false);
                     setIsProfileModalOpen(true);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: '#f1f5f9',
+                    textAlign: 'left'
+                  }}
                 >
-                  <User size={15} color="var(--wa-text-secondary)" />
-                  <span>Contact info</span>
-                </div>
-                <div
+                  <User size={16} color="var(--wa-text-secondary)" />
+                  <span style={{ fontWeight: 500 }}>Contact info</span>
+                </button>
+
+                {/* 2. Chat Wallpaper */}
+                <button
+                  type="button"
                   id="chatWallpaperOptionBtn"
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setShowOptionsMenu(false);
                     setShowWallpaperModal(true);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: '#4ade80' }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: '#4ade80',
+                    textAlign: 'left'
+                  }}
                 >
-                  <Palette size={15} />
-                  <span>Chat Wallpaper</span>
-                </div>
-                <div
+                  <Palette size={16} />
+                  <span style={{ fontWeight: 500 }}>Chat Wallpaper</span>
+                </button>
+
+                {/* 3. Block / Unblock contact */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setShowOptionsMenu(false);
                     onToggleBlock && onToggleBlock(activeContact);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: isBlocked ? '#00a884' : 'var(--wa-danger)' }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: isBlocked ? '#00a884' : 'var(--wa-danger)',
+                    textAlign: 'left'
+                  }}
                 >
-                  {isBlocked ? <ShieldCheck size={15} /> : <ShieldAlert size={15} />}
-                  <span>{isBlocked ? 'Unblock contact' : 'Block contact'}</span>
-                </div>
-                <div
+                  {isBlocked ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
+                  <span style={{ fontWeight: 500 }}>{isBlocked ? 'Unblock contact' : 'Block contact'}</span>
+                </button>
+
+                {/* 4. Clear Messages */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setShowOptionsMenu(false);
                     setShowClearChatConfirm(true);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    color: '#f1f5f9',
+                    textAlign: 'left'
+                  }}
                 >
-                  <Sparkles size={15} color="var(--wa-text-secondary)" />
-                  <span>Clear Messages</span>
-                </div>
-                <div
+                  <Sparkles size={16} color="var(--wa-text-secondary)" />
+                  <span style={{ fontWeight: 500 }}>Clear Messages</span>
+                </button>
+
+                {/* 5. Delete Chat */}
+                <button
+                  type="button"
+                  className="wa-menu-dropdown-item"
                   onClick={() => {
                     setShowOptionsMenu(false);
                     setShowDeleteChatConfirm(true);
                   }}
-                  style={{ padding: '10px 16px', fontSize: 13, cursor: 'pointer', color: 'var(--wa-danger)', display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    color: 'var(--wa-danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderRadius: 10,
+                    textAlign: 'left'
+                  }}
                 >
-                  <Trash2 size={15} />
-                  <span>Delete Chat</span>
-                </div>
+                  <Trash2 size={16} />
+                  <span style={{ fontWeight: 500 }}>Delete Chat</span>
+                </button>
               </div>,
               document.body
             )}

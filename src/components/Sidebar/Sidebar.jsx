@@ -73,29 +73,35 @@ export default function Sidebar({
   const [editAvatar, setEditAvatar] = useState(currentUser?.avatar || AVATAR_PRESETS[0]);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Sync state if currentUser changes
+  // Sync state if currentUser changes or drawer opens
   React.useEffect(() => {
     if (currentUser) {
-      setEditName(currentUser.name || '');
+      setEditName(currentUser.name || currentUser.displayName || '');
       setEditUsername(currentUser.username || '');
+      setEditUsernameStatus('available');
       setEditGender(currentUser.gender || 'male');
       setEditAbout(currentUser.about || '📶 Available on WiFi');
-      setEditAvatar(currentUser.avatar || AVATAR_PRESETS[0]);
+      setEditAvatar(currentUser.avatar || currentUser.photoURL || AVATAR_PRESETS[0]);
     }
-  }, [currentUser]);
+  }, [currentUser, isProfileDrawerOpen]);
 
   const handleEditUsernameChange = (val) => {
     const clean = cleanUsername(val);
     setEditUsername(clean);
     if (!clean) {
-      setEditUsernameStatus('');
+      setEditUsernameStatus('invalid');
       return;
     }
     if (!isValidUsernameFormat(clean)) {
       setEditUsernameStatus('invalid');
       return;
     }
-    const avail = isUsernameAvailable(clean, currentUser?.id);
+    // If it's the current user's own username, it's always valid and available
+    if (clean === cleanUsername(currentUser?.username)) {
+      setEditUsernameStatus('available');
+      return;
+    }
+    const avail = isUsernameAvailable(clean, currentUser?.id || currentUser?.uid);
     setEditUsernameStatus(avail ? 'available' : 'taken');
   };
 
@@ -116,27 +122,50 @@ export default function Sidebar({
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressAvatar(file, 256, 0.8);
+        const compressed = await compressAvatar(file, 300, 0.82);
         setEditAvatar(compressed);
       } catch (err) {
-        console.error('Failed to compress avatar:', err);
+        console.warn('Failed to compress avatar, reading file directly:', err);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ev.target?.result) setEditAvatar(ev.target.result);
+        };
+        reader.readAsDataURL(file);
       }
     }
   };
 
   const handleSaveDrawerProfile = () => {
-    if (!editName.trim() || !onUpdateProfile) return;
+    if (!editName.trim()) {
+      alert('Please enter your name.');
+      return;
+    }
+    if (!onUpdateProfile) return;
     const clean = cleanUsername(editUsername || currentUser?.username || '');
-    if (!clean || !isValidUsernameFormat(clean)) return;
-    if (!isUsernameAvailable(clean, currentUser?.id)) return;
+    if (!clean || !isValidUsernameFormat(clean)) {
+      alert('Please enter a valid username (3-20 characters: lowercase letters, numbers, _, .)');
+      return;
+    }
+
+    const isOwn = clean === cleanUsername(currentUser?.username);
+    if (!isOwn) {
+      const avail = isUsernameAvailable(clean, currentUser?.id || currentUser?.uid);
+      if (!avail) {
+        alert(`Username @${clean} is already taken. Please choose another.`);
+        setEditUsernameStatus('taken');
+        return;
+      }
+    }
 
     const updated = {
       ...currentUser,
       name: editName.trim(),
+      displayName: editName.trim(),
       username: clean,
       gender: editGender,
       about: editAbout.trim() || '📶 Available on WiFi',
-      avatar: editAvatar
+      avatar: editAvatar,
+      photoURL: editAvatar
     };
     registerUsername(clean, updated);
     onUpdateProfile(updated);
@@ -144,7 +173,7 @@ export default function Sidebar({
     setTimeout(() => {
       setSaveSuccess(false);
       setIsProfileDrawerOpen(false);
-    }, 800);
+    }, 700);
   };
 
   // Add Contact Modal State (Instagram Style Username Discovery)
@@ -1271,9 +1300,21 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* Slide-out Profile Drawer (Edit Name, Bio & Avatar) */}
+      {/* Slide-out Profile Drawer (Edit Name, Bio & Avatar - Full Top to Bottom Cover) */}
       {isProfileDrawerOpen && (
-        <div className="wa-profile-drawer" style={{ zIndex: 2500 }}>
+        <div
+          className="wa-profile-drawer"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 3500
+          }}
+        >
           <div className="wa-profile-drawer-header">
             <button
               id="closeProfileDrawerBtn"
@@ -1286,7 +1327,7 @@ export default function Sidebar({
             >
               <ArrowLeft size={20} />
             </button>
-            <span style={{ fontSize: '17px', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>Profile</span>
+            <span style={{ fontSize: '18px', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>Profile</span>
           </div>
 
           <div className="wa-profile-drawer-body">
@@ -1480,18 +1521,33 @@ export default function Sidebar({
 
             {/* Save Button */}
             <button
+              id="saveProfileDrawerBtn"
+              type="button"
               className="wa-login-cta-btn"
               onClick={handleSaveDrawerProfile}
               disabled={!editName.trim() || editUsernameStatus === 'taken' || editUsernameStatus === 'invalid'}
-              style={{ marginTop: 8 }}
+              style={{
+                marginTop: 14,
+                marginBottom: 20,
+                cursor: (!editName.trim() || editUsernameStatus === 'taken' || editUsernameStatus === 'invalid') ? 'not-allowed' : 'pointer',
+                opacity: (!editName.trim() || editUsernameStatus === 'taken' || editUsernameStatus === 'invalid') ? 0.65 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                boxShadow: saveSuccess ? '0 0 20px rgba(34, 197, 94, 0.6)' : undefined
+              }}
             >
               {saveSuccess ? (
                 <>
-                  <Check size={18} />
-                  <span>Saved!</span>
+                  <Check size={19} />
+                  <span>Profile Saved Successfully!</span>
                 </>
               ) : (
-                <span>Save Profile</span>
+                <>
+                  <Sparkles size={17} />
+                  <span>Save Profile</span>
+                </>
               )}
             </button>
           </div>

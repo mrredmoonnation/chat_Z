@@ -49,6 +49,8 @@ export default function PhoneLogin({ onLoginSuccess }) {
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [isGoogleAuth, setIsGoogleAuth] = useState(false);
+  const [pendingAuthProfile, setPendingAuthProfile] = useState(null);
 
   // Profile Details State
   const [signupName, setSignupName] = useState('');
@@ -205,27 +207,20 @@ export default function PhoneLogin({ onLoginSuccess }) {
       return;
     }
 
-    // 4. If account doesn't exist yet, auto-create it smoothly so user is never blocked!
+    // 4. If account doesn't exist yet, take user to Profile Setup so they choose their name & username!
     const cleanName = cleanId.split('@')[0];
-    const newProfile = {
-      uid: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-      id: 'wa_user_' + cleanUsername(cleanName),
-      username: cleanUsername(cleanName),
-      name: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
-      displayName: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
-      email: cleanId.includes('@') ? cleanId : `${cleanUsername(cleanName)}@chatz.app`,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername(cleanName)}`,
-      about: 'Hey there! I am using Chatz'
-    };
-    registerUsername(cleanUsername(cleanName), newProfile);
-    saveAccountCredentials(cleanId, loginPassword, newProfile);
-    saveAccountCredentials(cleanUsername(cleanName), loginPassword, newProfile);
-    publishUserToCloud(newProfile);
-    setSuccessMsg('Account created & logged in! Welcome to Chatz.');
-    setTimeout(() => {
-      setLoading(false);
-      onLoginSuccess(newProfile);
-    }, 200);
+    setSignupName(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
+    setSignupUsername(cleanUsername(cleanName));
+    setUsernameStatus('available');
+    setSignupEmail(cleanId.includes('@') ? cleanId : '');
+    setSignupPassword(loginPassword);
+    setConfirmPassword(loginPassword);
+    setIsGoogleAuth(false);
+    setPendingAuthProfile(null);
+    setLoading(false);
+    setSuccessMsg('First time here? Please set up your personal name and username.');
+    handleModeChange('signup_profile');
+    return;
   };
 
   // Instant 1-Click Direct Login helper (bypasses Firebase domain requirements)
@@ -386,49 +381,56 @@ export default function PhoneLogin({ onLoginSuccess }) {
       return;
     }
 
-    if (!isUsernameAvailable(clean)) {
+    const currentUserId = pendingAuthProfile?.uid || pendingAuthProfile?.id;
+    if (!isUsernameAvailable(clean, currentUserId)) {
       setErrorMsg(`Username @${clean} is already taken. Please choose another username.`);
       setUsernameStatus('taken');
       return;
     }
 
-    if (signupPassword.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
-      return;
-    }
+    if (!isGoogleAuth) {
+      if (signupPassword.length < 6) {
+        setErrorMsg('Password must be at least 6 characters long.');
+        return;
+      }
 
-    if (signupPassword !== confirmPassword) {
-      setErrorMsg('Passwords do not match. Please check both password fields.');
-      return;
+      if (signupPassword !== confirmPassword) {
+        setErrorMsg('Passwords do not match. Please check both password fields.');
+        return;
+      }
     }
 
     setLoading(true);
 
     const userProfile = {
-      uid: 'user_' + clean,
-      id: 'wa_user_' + clean,
+      ...(pendingAuthProfile || {}),
+      uid: pendingAuthProfile?.uid || ('user_' + clean),
+      id: pendingAuthProfile?.id || ('wa_user_' + clean),
       username: clean,
       name: signupName.trim(),
       displayName: signupName.trim(),
       gender: signupGender,
-      phone: null,
-      email: signupEmail.trim() || `${clean}@chatz.web`,
+      phone: pendingAuthProfile?.phone || null,
+      email: signupEmail.trim() || pendingAuthProfile?.email || `${clean}@chatz.web`,
       avatar: customAvatar || avatar,
       photoURL: customAvatar || avatar,
       about: about.trim() || '📶 Available on WiFi',
-      authMethod: 'gmail_otp_password',
-      joinedAt: Date.now()
+      authMethod: isGoogleAuth ? 'google' : 'gmail_otp_password',
+      profileSetupCompleted: true,
+      joinedAt: pendingAuthProfile?.joinedAt || Date.now()
     };
 
     // Save in local registry & account credentials for both username AND email
     registerUsername(clean, userProfile);
-    saveAccountCredentials(clean, signupPassword, userProfile);
-    if (signupEmail.trim()) {
-      saveAccountCredentials(signupEmail.trim(), signupPassword, userProfile);
+    if (!isGoogleAuth && signupPassword) {
+      saveAccountCredentials(clean, signupPassword, userProfile);
+      if (signupEmail.trim()) {
+        saveAccountCredentials(signupEmail.trim(), signupPassword, userProfile);
+      }
     }
 
-    // Register in Firebase Auth if available
-    if (firebaseAvailable && signupEmail.trim()) {
+    // Register in Firebase Auth if available and not Google
+    if (!isGoogleAuth && firebaseAvailable && signupEmail.trim()) {
       try {
         await signUpWithEmail(signupEmail.trim(), signupPassword, signupName.trim());
       } catch (err) {
@@ -436,12 +438,12 @@ export default function PhoneLogin({ onLoginSuccess }) {
       }
     }
 
-    setSuccessMsg('Account created successfully! Welcome to Chatz.');
+    setSuccessMsg('Profile created successfully! Welcome to Chatz.');
     publishUserToCloud(userProfile);
     setTimeout(() => {
       setLoading(false);
       onLoginSuccess(userProfile);
-    }, 300);
+    }, 250);
   };
 
   // 1-Click Google Sign-In with Firestore Profile Sync
@@ -454,9 +456,27 @@ export default function PhoneLogin({ onLoginSuccess }) {
       try {
         const firestoreProfile = await loginWithGoogle();
         if (firestoreProfile) {
-          setSuccessMsg('Google Login successful! Welcome to Chatz.');
+          // If the user already completed profile setup in the past:
+          if (firestoreProfile.profileSetupCompleted) {
+            setSuccessMsg('Google Login successful! Welcome back.');
+            setLoading(false);
+            onLoginSuccess(firestoreProfile);
+            return;
+          }
+
+          // First time user via Google: show the Profile Setup screen!
+          setSignupName(firestoreProfile.displayName || firestoreProfile.name || '');
+          const cleanU = cleanUsername(firestoreProfile.username || firestoreProfile.email?.split('@')[0] || '');
+          setSignupUsername(cleanU);
+          setUsernameStatus('available');
+          setAvatar(firestoreProfile.photoURL || firestoreProfile.avatar || GENDER_AVATARS.male[0]);
+          setCustomAvatar(firestoreProfile.photoURL || firestoreProfile.avatar || null);
+          setSignupEmail(firestoreProfile.email || '');
+          setIsGoogleAuth(true);
+          setPendingAuthProfile(firestoreProfile);
           setLoading(false);
-          onLoginSuccess(firestoreProfile);
+          setSuccessMsg('Google connected! Please set your username and personal name.');
+          handleModeChange('signup_profile');
           return;
         }
       } catch (err) {
@@ -1145,55 +1165,82 @@ export default function PhoneLogin({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Field 3: Create Password */}
-            <div style={{ marginBottom: 14, textAlign: 'left' }}>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--wa-text-primary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <KeyRound size={15} color="var(--wa-green)" />
-                <span>Create Password <strong style={{ color: '#ea4335' }}>*</strong></span>
-              </label>
-              <div className="wa-input-with-icon-wrapper">
-                <input
-                  id="createPasswordInput"
-                  type={showSignupPassword ? 'text' : 'password'}
-                  className="wa-phone-number-field"
-                  style={{ width: '100%', paddingRight: 40, fontSize: '14px' }}
-                  placeholder="Minimum 6 characters"
-                  value={signupPassword}
-                  onChange={(e) => setSignupPassword(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  className="wa-password-toggle-btn"
-                  onClick={() => setShowSignupPassword(!showSignupPassword)}
-                  title={showSignupPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showSignupPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+            {/* Field 3 & 4: Password fields OR Google Linked Badge */}
+            {isGoogleAuth ? (
+              <div style={{
+                marginBottom: 16,
+                padding: '12px 14px',
+                background: 'rgba(34, 197, 94, 0.12)',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                borderRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                textAlign: 'left'
+              }}>
+                <ShieldCheck size={20} color="#4ade80" style={{ flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#4ade80' }}>
+                    Connected via Google
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {signupEmail || 'Your Google Account'} (Password not required)
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Field 3: Create Password */}
+                <div style={{ marginBottom: 14, textAlign: 'left' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--wa-text-primary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <KeyRound size={15} color="var(--wa-green)" />
+                    <span>Create Password <strong style={{ color: '#ea4335' }}>*</strong></span>
+                  </label>
+                  <div className="wa-input-with-icon-wrapper">
+                    <input
+                      id="createPasswordInput"
+                      type={showSignupPassword ? 'text' : 'password'}
+                      className="wa-phone-number-field"
+                      style={{ width: '100%', paddingRight: 40, fontSize: '14px' }}
+                      placeholder="Minimum 6 characters"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="wa-password-toggle-btn"
+                      onClick={() => setShowSignupPassword(!showSignupPassword)}
+                      title={showSignupPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showSignupPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
 
-            {/* Field 4: Confirm Password */}
-            <div style={{ marginBottom: 16, textAlign: 'left' }}>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--wa-text-primary)', display: 'block', marginBottom: 6 }}>
-                Confirm Password <strong style={{ color: '#ea4335' }}>*</strong>
-              </label>
-              <input
-                id="confirmPasswordInput"
-                type={showSignupPassword ? 'text' : 'password'}
-                className="wa-phone-number-field"
-                style={{ width: '100%', fontSize: '14px' }}
-                placeholder="Re-enter your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-              {confirmPassword && signupPassword !== confirmPassword && (
-                <span style={{ fontSize: '12px', color: 'var(--wa-danger)', marginTop: 4, display: 'block' }}>
-                  ✕ Passwords do not match
-                </span>
-              )}
-            </div>
+                {/* Field 4: Confirm Password */}
+                <div style={{ marginBottom: 16, textAlign: 'left' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--wa-text-primary)', display: 'block', marginBottom: 6 }}>
+                    Confirm Password <strong style={{ color: '#ea4335' }}>*</strong>
+                  </label>
+                  <input
+                    id="confirmPasswordInput"
+                    type={showSignupPassword ? 'text' : 'password'}
+                    className="wa-phone-number-field"
+                    style={{ width: '100%', fontSize: '14px' }}
+                    placeholder="Re-enter your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                  {confirmPassword && signupPassword !== confirmPassword && (
+                    <span style={{ fontSize: '12px', color: 'var(--wa-danger)', marginTop: 4, display: 'block' }}>
+                      ✕ Passwords do not match
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Field 5: Bio Status */}
             <div style={{ marginBottom: 20, textAlign: 'left' }}>
@@ -1232,17 +1279,33 @@ export default function PhoneLogin({ onLoginSuccess }) {
               disabled={
                 loading ||
                 !signupName.trim() ||
-                usernameStatus !== 'available' ||
-                signupPassword.length < 6 ||
-                signupPassword !== confirmPassword
+                usernameStatus === 'taken' ||
+                usernameStatus === 'invalid' ||
+                (!isGoogleAuth && (signupPassword.length < 6 || signupPassword !== confirmPassword))
               }
+              style={{
+                cursor: (
+                  loading ||
+                  !signupName.trim() ||
+                  usernameStatus === 'taken' ||
+                  usernameStatus === 'invalid' ||
+                  (!isGoogleAuth && (signupPassword.length < 6 || signupPassword !== confirmPassword))
+                ) ? 'not-allowed' : 'pointer',
+                opacity: (
+                  loading ||
+                  !signupName.trim() ||
+                  usernameStatus === 'taken' ||
+                  usernameStatus === 'invalid' ||
+                  (!isGoogleAuth && (signupPassword.length < 6 || signupPassword !== confirmPassword))
+                ) ? 0.65 : 1
+              }}
             >
               {loading ? (
                 <span>Creating Account...</span>
               ) : (
                 <>
                   <UserCheck size={18} />
-                  <span>Create Account & Start Chatting</span>
+                  <span>{isGoogleAuth ? 'Complete & Start Chatting' : 'Create Account & Start Chatting'}</span>
                 </>
               )}
             </button>

@@ -67,7 +67,7 @@ const getStoredChatWallpaper = (...keys) => {
 };
 
 export default function App() {
-  const { currentUser: authUser, logout: authLogout, setCurrentUser: setAuthCurrentUser } = useAuth();
+  const { currentUser: authUser, logout: authLogout, setCurrentUser: setAuthCurrentUser, updateUserProfile: authUpdateUserProfile } = useAuth();
   const [currentUser, setCurrentUser] = useState(() => {
     const u = getStoredUser();
     if (u && !u.username) {
@@ -1013,6 +1013,7 @@ export default function App() {
   const handleUpdateProfile = (updatedProfile) => {
     setCurrentUser(updatedProfile);
     if (setAuthCurrentUser) setAuthCurrentUser(updatedProfile);
+    if (authUpdateUserProfile) authUpdateUserProfile(updatedProfile);
     saveStoredUser(updatedProfile);
     if (updatedProfile?.username) {
       publishUserToCloud(updatedProfile);
