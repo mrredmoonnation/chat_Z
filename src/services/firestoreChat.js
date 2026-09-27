@@ -1,7 +1,8 @@
-// Real-Time Firestore Chat Service for ChatRooms, Messages, and User Profiles
 import { 
   getFirebaseFirestore 
 } from './firebase';
+import { cleanUsername } from './store';
+import { COMMUNITY_HUB_ID, COMMUNITY_ADMIN_USERNAME } from './communityHub';
 import { 
   collection, 
   doc, 
@@ -734,4 +735,100 @@ export const fetchOfflineInboxMessagesOnce = async (userChannels = [], onMessage
 
   return totalFetched;
 };
+
+/**
+ * -------------------------------------------------------------
+ * 7. TECH COMMUNITY & IDEAS PUBLIC FORUM (Cloud Sync)
+ * -------------------------------------------------------------
+ */
+
+export const sendFirestoreCommunityMessage = async (currentUser, messagePayload) => {
+  const db = getFirebaseFirestore();
+  if (!db) return null;
+
+  const textContent = messagePayload.text || '';
+  const mediaUrl = messagePayload.url || messagePayload.fileUrl || null;
+  const cleanUser = cleanUsername(currentUser?.username);
+  const isAdmin = cleanUser === COMMUNITY_ADMIN_USERNAME || 
+                  currentUser?.username?.toLowerCase() === COMMUNITY_ADMIN_USERNAME.toLowerCase() || 
+                  currentUser?.uid?.includes(COMMUNITY_ADMIN_USERNAME);
+
+  const senderDisplayName = currentUser?.displayName || currentUser?.name || (isAdmin ? 'Sonu Sahani' : 'Baat Chit Member');
+  const userUid = currentUser?.uid || currentUser?.id || `user_${Date.now()}`;
+
+  const messageData = {
+    roomId: COMMUNITY_HUB_ID,
+    senderUid: userUid,
+    senderId: userUid,
+    senderName: senderDisplayName,
+    senderUsername: isAdmin ? COMMUNITY_ADMIN_USERNAME : null,
+    isAdmin: Boolean(isAdmin),
+    text: textContent,
+    type: messagePayload.type || 'text',
+    url: mediaUrl,
+    fileUrl: mediaUrl,
+    fileName: messagePayload.fileName || null,
+    caption: messagePayload.caption || null,
+    clientMsgId: messagePayload.id || `comm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    status: 'delivered',
+    timestamp: serverTimestamp()
+  };
+
+  try {
+    const msgRef = await addDoc(collection(db, 'ChatRooms', COMMUNITY_HUB_ID, 'Messages'), messageData);
+    return { id: msgRef.id, ...messageData };
+  } catch (err) {
+    console.warn('sendFirestoreCommunityMessage notice:', err);
+    return null;
+  }
+};
+
+export const subscribeToCommunityMessages = (onMessagesUpdate) => {
+  const db = getFirebaseFirestore();
+  if (!db) return () => {};
+
+  try {
+    const q = query(
+      collection(db, 'ChatRooms', COMMUNITY_HUB_ID, 'Messages'),
+      orderBy('timestamp', 'asc'),
+      limit(250)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          let numericTimestamp = Date.now();
+          let formattedTime = 'Just now';
+          if (data.timestamp?.toMillis) {
+            numericTimestamp = data.timestamp.toMillis();
+            formattedTime = new Date(numericTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } else if (data.timestamp?.seconds) {
+            numericTimestamp = data.timestamp.seconds * 1000;
+            formattedTime = new Date(numericTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+          msgs.push({
+            id: d.id,
+            ...data,
+            timestamp: numericTimestamp,
+            time: formattedTime,
+            status: 'delivered'
+          });
+        });
+        onMessagesUpdate && onMessagesUpdate(msgs);
+      },
+      (err) => {
+        console.warn('subscribeToCommunityMessages notice:', err);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('subscribeToCommunityMessages init notice:', err);
+    return () => {};
+  }
+};
+
 

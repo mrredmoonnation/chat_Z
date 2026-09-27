@@ -33,6 +33,7 @@ import {
   COMMUNITY_HUB_ID,
   COMMUNITY_CONTACT,
   COMMUNITY_ADMIN_USERNAME,
+  INITIAL_COMMUNITY_MESSAGE,
   getStoredCommunityMessages,
   saveStoredCommunityMessages
 } from './services/communityHub';
@@ -51,7 +52,9 @@ import {
   markFirestoreStorySeen,
   sendOfflineInboxMessage,
   subscribeToOfflineInbox,
-  fetchOfflineInboxMessagesOnce
+  fetchOfflineInboxMessagesOnce,
+  sendFirestoreCommunityMessage,
+  subscribeToCommunityMessages
 } from './services/firestoreChat';
 import { PAPPU_AI_ID, PAPPU_AI_CONTACT, generatePappuReply } from './services/pappuAI';
 import PhoneLogin from './components/Auth/PhoneLogin';
@@ -1240,6 +1243,35 @@ export default function App() {
     };
   }, [activeContactId]);
 
+  // Live Tech Community Discussion Firestore Cloud Sync Listener
+  useEffect(() => {
+    const unsubscribeFirestore = subscribeToCommunityMessages((firestoreMsgs) => {
+      if (!Array.isArray(firestoreMsgs) || firestoreMsgs.length === 0) return;
+
+      setCommunityMessages((prev) => {
+        const msgMap = new Map();
+        [INITIAL_COMMUNITY_MESSAGE, ...prev, ...firestoreMsgs].forEach((m) => {
+          if (!m || !m.id) return;
+          msgMap.set(m.id, m);
+        });
+
+        const merged = Array.from(msgMap.values());
+        merged.sort((a, b) => {
+          if (a.id === 'msg_community_admin_welcome') return -1;
+          if (b.id === 'msg_community_admin_welcome') return 1;
+          return (a.timestamp || 0) - (b.timestamp || 0);
+        });
+
+        saveStoredCommunityMessages(merged);
+        return merged;
+      });
+    });
+
+    return () => {
+      unsubscribeFirestore && unsubscribeFirestore();
+    };
+  }, []);
+
   // Handle Login Success
   const handleLoginSuccess = (profile) => {
     setCurrentUser(profile);
@@ -1431,13 +1463,15 @@ export default function App() {
                       currentUser?.username?.toLowerCase() === COMMUNITY_ADMIN_USERNAME.toLowerCase() || 
                       currentUser?.uid?.includes(COMMUNITY_ADMIN_USERNAME);
 
+      const userUid = currentUser?.uid || currentUser?.id || `user_${Date.now()}`;
       const commMsg = {
         id: 'comm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-        // For privacy: Do NOT expose user id / phone to other devices! Only display name is public.
-        senderId: isAdmin ? `admin_${COMMUNITY_ADMIN_USERNAME}` : `member_${Math.random().toString(36).substring(2, 8)}`,
+        senderUid: userUid,
+        senderId: userUid,
         senderUsername: isAdmin ? COMMUNITY_ADMIN_USERNAME : null,
-        senderName: currentUser?.name || currentUser?.displayName || (isAdmin ? 'Sonu Sahani' : 'Baat Chit Member'),
-        isAdmin: isAdmin,
+        senderName: currentUser?.displayName || currentUser?.name || (isAdmin ? 'Sonu Sahani' : 'Baat Chit Member'),
+        isAdmin: Boolean(isAdmin),
+        isOutgoing: true,
         text: msgData.text || '',
         type: msgData.type || 'text',
         url: msgData.url || msgData.fileUrl || null,
@@ -1455,8 +1489,26 @@ export default function App() {
         return updated;
       });
 
+      // Update contacts state so sidebar and list reflect lastMessage
+      setContacts((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id === COMMUNITY_HUB_ID || c.isCommunity) {
+            return {
+              ...c,
+              messages: [...(c.messages || []), commMsg],
+              lastMessage: commMsg.text || 'Shared media',
+              lastMessageTimestamp: nowTs
+            };
+          }
+          return c;
+        });
+        saveStoredContacts(updated);
+        return updated;
+      });
+
       broadcastChange('COMMUNITY_MESSAGE', commMsg);
       publishCommunityMessage(commMsg);
+      sendFirestoreCommunityMessage(currentUser, commMsg);
       return;
     }
 

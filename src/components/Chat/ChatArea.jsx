@@ -771,11 +771,19 @@ export default function ChatArea({
           const msgSenderUsername = String(msg.senderUsername || '').toLowerCase();
 
           const isOutgoing =
+            Boolean(msg.isOutgoing) ||
             msgSenderId === 'user' ||
-            (myUid && (msgSenderId === myUid || msgSenderId === `user_${myUid}`)) ||
+            (myUid && (
+              msgSenderId === myUid || 
+              msgSenderId === `user_${myUid}` || 
+              msg.senderUid === myUid ||
+              msg.senderUid === `user_${myUid}` ||
+              (myUsername && msgSenderId === `admin_${myUsername}`)
+            )) ||
             (myUsername && (
               msgSenderId === myUsername ||
               msgSenderId === `wa_user_${myUsername}` ||
+              msgSenderId === `admin_${myUsername}` ||
               msgSenderUsername === myUsername
             ));
           const isCurrentMatch = matchingMsgIds[currentMatchIndex] === msg.id;
