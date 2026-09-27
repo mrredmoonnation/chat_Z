@@ -1520,42 +1520,80 @@ export default function Sidebar({
               </div>
             </div>
 
-            {/* WhatsApp Profile QR Code Quick Access Card */}
-            <button
-              id="drawerProfileQrRowBtn"
-              type="button"
-              className="wa-qr-profile-card-btn"
-              onClick={() => {
-                setQrModalInitialTab('myCode');
-                setIsQrModalOpen(true);
-              }}
-              title="Tap to view your QR code or scan friends to chat"
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: '50%',
-                  background: 'rgba(0, 168, 132, 0.16)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--wa-green-light)',
-                  flexShrink: 0
-                }}>
-                  <QrCode size={21} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#ffffff' }}>
-                    QR code
+            {/* WhatsApp Profile QR Code & Camera Scanner Group */}
+            <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+              <button
+                id="drawerProfileMyQrBtn"
+                type="button"
+                className="wa-qr-profile-card-btn"
+                style={{ flex: 1, padding: '12px 14px' }}
+                onClick={() => {
+                  setQrModalInitialTab('myCode');
+                  setIsQrModalOpen(true);
+                }}
+                title="Tap to view & share your personal QR code"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '50%',
+                    background: 'rgba(0, 168, 132, 0.18)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--wa-green-light)',
+                    flexShrink: 0
+                  }}>
+                    <QrCode size={20} />
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--wa-text-muted)' }}>
-                    Tap to view or scan QR code to start chat
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#ffffff' }}>
+                      My QR Code
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--wa-text-muted)' }}>
+                      Mera QR dekhein
+                    </div>
                   </div>
                 </div>
-              </div>
-              <ArrowUpRight size={17} style={{ color: 'var(--wa-green-light)' }} />
-            </button>
+              </button>
+
+              <button
+                id="drawerProfileScanQrBtn"
+                type="button"
+                className="wa-qr-profile-card-btn"
+                style={{ flex: 1, padding: '12px 14px' }}
+                onClick={() => {
+                  setQrModalInitialTab('scanCode');
+                  setIsQrModalOpen(true);
+                }}
+                title="Tap to open camera and scan any QR code"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '50%',
+                    background: 'rgba(59, 130, 246, 0.18)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#60a5fa',
+                    flexShrink: 0
+                  }}>
+                    <Camera size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#ffffff' }}>
+                      Scan QR
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--wa-text-muted)' }}>
+                      Camera se scan
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
 
             {/* Username Field */}
             <div>
