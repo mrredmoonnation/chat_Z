@@ -198,11 +198,13 @@ export const publishUserToCloud = (userProfile) => {
   const cleanU = cleanUsername(userProfile.username);
   if (!cleanU) return false;
 
+  const targetAvatar = userProfile.avatar || userProfile.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`;
   const profileData = {
     id: `wa_user_${cleanU}`,
     username: cleanU,
     name: userProfile.name || cleanU,
-    avatar: userProfile.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
+    avatar: targetAvatar,
+    photoURL: targetAvatar,
     about: userProfile.about || 'Hey there! I am using baat chit',
     phone: userProfile.phone || '',
     email: userProfile.email || '',

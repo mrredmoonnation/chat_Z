@@ -91,15 +91,17 @@ export default function SettingsModal({
     if (!name.trim()) return;
     const clean = cleanUsername(username || currentUser?.username || '');
     if (!clean || !isValidUsernameFormat(clean)) return;
-    if (!isUsernameAvailable(clean, currentUser?.id)) return;
+    if (!isUsernameAvailable(clean, currentUser?.id || currentUser?.uid, currentUser?.username)) return;
 
+    const chosenAvatar = avatar || currentUser?.avatar || currentUser?.photoURL;
     const updated = {
       ...currentUser,
       name: name.trim(),
       displayName: name.trim(),
       username: clean,
       about: about.trim() || 'Hey there! I am using baat chit',
-      avatar: avatar,
+      avatar: chosenAvatar,
+      photoURL: chosenAvatar,
       gender: gender
     };
 

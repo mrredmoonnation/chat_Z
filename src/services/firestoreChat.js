@@ -44,7 +44,7 @@ export const getFirestoreUserProfile = async (uid) => {
 
   try {
     const userDocRef = doc(db, 'Users', uid);
-    const snap = await withFirestoreTimeout(getDoc(userDocRef), 1200);
+    const snap = await withFirestoreTimeout(getDoc(userDocRef), 3500);
     if (snap && snap.exists()) {
       return snap.data();
     }
@@ -62,12 +62,14 @@ export const saveFirestoreUserProfile = async (profile) => {
   if (!db) return null;
 
   const cleanUsername = (profile.username || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const chosenAvatar = profile.photoURL || profile.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername || profile.uid}`;
   const data = {
     uid: profile.uid,
     email: profile.email || '',
     displayName: profile.displayName || profile.name || cleanUsername || 'User',
     username: cleanUsername,
-    photoURL: profile.photoURL || profile.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername || profile.uid}`,
+    photoURL: chosenAvatar,
+    avatar: chosenAvatar,
     about: profile.about || 'Hey there! I am using baat chit',
     lastSeen: serverTimestamp(),
     createdAt: profile.createdAt || serverTimestamp(),
@@ -76,7 +78,7 @@ export const saveFirestoreUserProfile = async (profile) => {
 
   try {
     const userDocRef = doc(db, 'Users', profile.uid);
-    await withFirestoreTimeout(setDoc(userDocRef, data, { merge: true }), 1500);
+    await withFirestoreTimeout(setDoc(userDocRef, data, { merge: true }), 3500);
     return data;
   } catch (err) {
     // Return local data even if remote save failed/timed out

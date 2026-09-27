@@ -452,9 +452,9 @@ export default function Sidebar({
           onClick={() => setIsProfileDrawerOpen(true)}
         >
           <div className="wa-avatar" style={{ position: 'relative' }}>
-            {currentUser?.avatar ? (
+            {(currentUser?.avatar || currentUser?.photoURL) ? (
               <img
-                src={currentUser.avatar}
+                src={currentUser.avatar || currentUser.photoURL}
                 alt={currentUser?.name || 'User'}
                 onError={(e) => {
                   e.currentTarget.onerror = null;

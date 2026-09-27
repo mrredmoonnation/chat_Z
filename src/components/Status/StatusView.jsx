@@ -205,13 +205,13 @@ export default function StatusView({
           {myStory ? (
             <div className="wa-status-avatar-ring">
               <div className="wa-avatar">
-                <img src={currentUser?.avatar} alt={currentUser?.name} />
+                <img src={currentUser?.avatar || currentUser?.photoURL} alt={currentUser?.name} />
               </div>
             </div>
           ) : (
             <>
               <div className="wa-avatar">
-                <img src={currentUser?.avatar} alt={currentUser?.name} />
+                <img src={currentUser?.avatar || currentUser?.photoURL} alt={currentUser?.name} />
               </div>
               <div
                 style={{

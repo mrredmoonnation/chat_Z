@@ -116,15 +116,20 @@ export const getRegisteredUsernames = () => {
   }
 };
 
-// Check if username is available (case-insensitive)
-export const isUsernameAvailable = (username, currentUserId = null) => {
+export const isUsernameAvailable = (username, currentUserId = null, currentUsername = null) => {
   const clean = cleanUsername(username);
   if (!isValidUsernameFormat(clean)) return false;
+  if (currentUsername && clean === cleanUsername(currentUsername)) return true;
   const registry = getRegisteredUsernames();
   const existing = registry[clean];
   if (!existing) return true;
   // If the same logged-in user owns this username, it's valid for them
-  if (currentUserId && existing.id === currentUserId) return true;
+  if (currentUserId && (
+    existing.id === currentUserId || 
+    existing.uid === currentUserId || 
+    existing.id === `wa_user_${clean}` ||
+    existing.username === cleanUsername(currentUserId)
+  )) return true;
   return false;
 };
 
@@ -218,11 +223,46 @@ export const getStoredUser = () => {
   }
 };
 
+export const updateAccountProfile = (profile) => {
+  if (!profile) return;
+  const accounts = getStoredAccounts();
+  const keys = [
+    cleanUsername(profile.username),
+    profile.email?.trim()?.toLowerCase(),
+    profile.phone?.trim()
+  ].filter(Boolean);
+
+  let updatedAny = false;
+  for (const k of keys) {
+    if (accounts[k]) {
+      accounts[k].profile = {
+        ...accounts[k].profile,
+        ...profile,
+        avatar: profile.avatar || profile.photoURL || accounts[k].profile?.avatar,
+        photoURL: profile.photoURL || profile.avatar || accounts[k].profile?.photoURL
+      };
+      accounts[k].updatedAt = Date.now();
+      updatedAny = true;
+    }
+  }
+  if (updatedAny) {
+    try {
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    } catch (e) {}
+  }
+};
+
 export const saveStoredUser = (user) => {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (!user) return;
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (err) {
+    console.warn('Failed to save user in localStorage:', err);
+  }
   if (user?.username) {
     registerUsername(user.username, user);
   }
+  updateAccountProfile(user);
   broadcastChange('USER_UPDATED', user);
 };
 

@@ -1012,12 +1012,18 @@ export default function App() {
 
   // Handle Profile Updates (Name, Bio, Avatar)
   const handleUpdateProfile = (updatedProfile) => {
-    setCurrentUser(updatedProfile);
-    if (setAuthCurrentUser) setAuthCurrentUser(updatedProfile);
-    if (authUpdateUserProfile) authUpdateUserProfile(updatedProfile);
-    saveStoredUser(updatedProfile);
-    if (updatedProfile?.username) {
-      publishUserToCloud(updatedProfile);
+    const finalAvatar = updatedProfile.avatar || updatedProfile.photoURL;
+    const finalized = {
+      ...updatedProfile,
+      avatar: finalAvatar,
+      photoURL: finalAvatar
+    };
+    setCurrentUser(finalized);
+    if (setAuthCurrentUser) setAuthCurrentUser(finalized);
+    if (authUpdateUserProfile) authUpdateUserProfile(finalized);
+    saveStoredUser(finalized);
+    if (finalized?.username) {
+      publishUserToCloud(finalized);
     }
   };
 

@@ -52,43 +52,78 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        // Construct fast profile immediately from Firebase Auth user
+        // Read existing local profile first to NEVER overwrite user's saved avatar, name, or username
+        let localProfile = null;
+        try {
+          const raw = localStorage.getItem('chatz_user_v1');
+          if (raw) localProfile = JSON.parse(raw);
+        } catch (e) {}
+
+        const isSameAccount = localProfile && (
+          localProfile.uid === user.uid ||
+          localProfile.id === user.uid ||
+          (localProfile.email && user.email && localProfile.email.toLowerCase() === user.email.toLowerCase())
+        );
+
         const defaultUsername = (user.email ? user.email.split('@')[0] : (user.displayName || 'user'))
           .toLowerCase()
           .replace(/[^a-z0-9_]/g, '') || `user_${Math.floor(Math.random() * 10000)}`;
 
+        const preservedAvatar = (isSameAccount && (localProfile.avatar || localProfile.photoURL))
+          ? (localProfile.avatar || localProfile.photoURL)
+          : (user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`);
+
         const fastProfile = {
           uid: user.uid,
           id: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || defaultUsername,
-          name: user.displayName || defaultUsername,
-          username: defaultUsername,
-          photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
-          avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
-          about: 'Hey there! I am using baat chit',
-          authMethod: 'google',
-          joinedAt: Date.now()
+          email: user.email || (isSameAccount ? localProfile.email : ''),
+          displayName: (isSameAccount && localProfile.displayName) ? localProfile.displayName : (user.displayName || defaultUsername),
+          name: (isSameAccount && localProfile.name) ? localProfile.name : (user.displayName || defaultUsername),
+          username: (isSameAccount && localProfile.username) ? localProfile.username : defaultUsername,
+          photoURL: preservedAvatar,
+          avatar: preservedAvatar,
+          about: (isSameAccount && localProfile.about) ? localProfile.about : 'Hey there! I am using baat chit',
+          gender: (isSameAccount && localProfile.gender) ? localProfile.gender : 'male',
+          authMethod: (isSameAccount && localProfile.authMethod) ? localProfile.authMethod : 'google',
+          joinedAt: (isSameAccount && localProfile.joinedAt) ? localProfile.joinedAt : Date.now()
         };
 
-        // Immediately activate user session (0ms delay)
+        // Immediately activate user session preserving custom avatar
         setCurrentUser(fastProfile);
-        localStorage.setItem('chatz_user_v1', JSON.stringify(fastProfile));
+        try {
+          localStorage.setItem('chatz_user_v1', JSON.stringify(fastProfile));
+        } catch (e) {}
         setLoading(false);
 
         // Background check for custom Firestore profile attributes (non-blocking)
         getFirestoreUserProfile(user.uid)
-          .then((profile) => {
-            if (profile) {
+          .then((remoteProfile) => {
+            if (remoteProfile) {
+              let currentLocal = null;
+              try {
+                const raw = localStorage.getItem('chatz_user_v1');
+                if (raw) currentLocal = JSON.parse(raw);
+              } catch (e) {}
+
+              // Never overwrite a custom avatar with an older one or empty one
+              const finalAvatar = currentLocal?.avatar || currentLocal?.photoURL || remoteProfile.photoURL || remoteProfile.avatar || fastProfile.avatar;
+
               const merged = {
                 ...fastProfile,
-                ...profile,
-                id: profile.uid || user.uid,
-                name: profile.displayName || profile.name || fastProfile.name,
-                avatar: profile.photoURL || profile.avatar || fastProfile.avatar
+                ...remoteProfile,
+                ...currentLocal,
+                id: remoteProfile.uid || user.uid,
+                uid: remoteProfile.uid || user.uid,
+                name: currentLocal?.name || remoteProfile.displayName || remoteProfile.name || fastProfile.name,
+                displayName: currentLocal?.displayName || remoteProfile.displayName || remoteProfile.name || fastProfile.name,
+                username: currentLocal?.username || remoteProfile.username || fastProfile.username,
+                avatar: finalAvatar,
+                photoURL: finalAvatar
               };
               setCurrentUser(merged);
-              localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+              try {
+                localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+              } catch (e) {}
             }
           })
           .catch(() => {});
@@ -131,27 +166,48 @@ export const AuthProvider = ({ children }) => {
 
       if (!user) throw new Error('No user returned from Google Sign-In.');
 
-      // Derive clean username and instant profile
+      // Check existing local profile to preserve custom avatar
+      let localProfile = null;
+      try {
+        const raw = localStorage.getItem('chatz_user_v1');
+        if (raw) localProfile = JSON.parse(raw);
+      } catch (e) {}
+
+      const isSameAccount = localProfile && (
+        localProfile.uid === user.uid ||
+        localProfile.id === user.uid ||
+        (localProfile.email && user.email && localProfile.email.toLowerCase() === user.email.toLowerCase())
+      );
+
       const baseName = user.email ? user.email.split('@')[0] : (user.displayName || 'user');
-      const cleanU = baseName.toLowerCase().replace(/[^a-z0-9_]/g, '') || `user_${Math.floor(Math.random() * 10000)}`;
+      const cleanU = (isSameAccount && localProfile.username) 
+        ? localProfile.username 
+        : (baseName.toLowerCase().replace(/[^a-z0-9_]/g, '') || `user_${Math.floor(Math.random() * 10000)}`);
+
+      const preservedAvatar = (isSameAccount && (localProfile.avatar || localProfile.photoURL))
+        ? (localProfile.avatar || localProfile.photoURL)
+        : (user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`);
 
       const newProfile = {
         uid: user.uid,
         id: user.uid,
         email: user.email || '',
-        displayName: user.displayName || cleanU,
-        name: user.displayName || cleanU,
+        displayName: (isSameAccount && localProfile.displayName) ? localProfile.displayName : (user.displayName || cleanU),
+        name: (isSameAccount && localProfile.name) ? localProfile.name : (user.displayName || cleanU),
         username: cleanU,
-        photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
-        avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
-        about: 'Hey there! I am using baat chit',
+        photoURL: preservedAvatar,
+        avatar: preservedAvatar,
+        about: (isSameAccount && localProfile.about) ? localProfile.about : 'Hey there! I am using baat chit',
+        gender: (isSameAccount && localProfile.gender) ? localProfile.gender : 'male',
         authMethod: 'google',
-        joinedAt: Date.now()
+        joinedAt: (isSameAccount && localProfile.joinedAt) ? localProfile.joinedAt : Date.now()
       };
 
       // Set user immediately! 0ms latency, never stuck on Signing In
       setCurrentUser(newProfile);
-      localStorage.setItem('chatz_user_v1', JSON.stringify(newProfile));
+      try {
+        localStorage.setItem('chatz_user_v1', JSON.stringify(newProfile));
+      } catch (e) {}
       setLoading(false);
 
       // Background Firestore sync (fire-and-forget, never blocks UI)
@@ -184,19 +240,39 @@ export const AuthProvider = ({ children }) => {
 
   // Update Profile
   const updateUserProfile = async (updatedData) => {
-    if (!currentUser?.uid) return;
     try {
-      const merged = { ...currentUser, ...updatedData };
-      await saveFirestoreUserProfile(merged);
+      let localProfile = null;
+      try {
+        const raw = localStorage.getItem('chatz_user_v1');
+        if (raw) localProfile = JSON.parse(raw);
+      } catch (e) {}
+
+      const targetAvatar = updatedData.avatar || updatedData.photoURL || localProfile?.avatar || currentUser?.avatar;
+      const merged = {
+        ...localProfile,
+        ...currentUser,
+        ...updatedData,
+        avatar: targetAvatar,
+        photoURL: targetAvatar
+      };
+
       setCurrentUser(merged);
-      localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+      try {
+        localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+      } catch (e) {}
+
+      if (merged.uid) {
+        saveFirestoreUserProfile(merged).catch((err) => console.warn('Firestore profile sync error:', err));
+      }
+
       return merged;
     } catch (err) {
       console.error('Failed to update profile in Firestore:', err);
-      // Update locally
       const merged = { ...currentUser, ...updatedData };
       setCurrentUser(merged);
-      localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+      try {
+        localStorage.setItem('chatz_user_v1', JSON.stringify(merged));
+      } catch (e) {}
       return merged;
     }
   };
