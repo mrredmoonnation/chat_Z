@@ -5933,7 +5933,23 @@ textarea {
   background: rgba(8, 12, 18, 0.35) !important;
 }
 
-.wa-chat-area > *:not(.wa-chat-moving-bg) {
+.wa-chat-area > *:not(.wa-chat-moving-bg):not(.wa-custom-wallpaper-layer):not(.wa-doodle-bg) {
   position: relative !important;
+  z-index: 2 !important;
+}
+
+.wa-custom-wallpaper-layer {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
   z-index: 1 !important;
+}
+
+.wa-doodle-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
 }

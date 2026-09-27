@@ -45,6 +45,11 @@ export default function ChatArea({
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
   const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [localWallpaper, setLocalWallpaper] = useState(activeContact?.wallpaper || null);
+
+  useEffect(() => {
+    setLocalWallpaper(activeContact?.wallpaper || null);
+  }, [activeContact?.id, activeContact?.wallpaper]);
 
   // Close bubble menu and options menu on outside pointerdown
   useEffect(() => {
@@ -250,11 +255,12 @@ export default function ChatArea({
     }
   };
 
-  // Wallpaper background calculation
-  const hasCustomWallpaper = Boolean(activeContact?.wallpaper && activeContact.wallpaper.id !== 'default');
-  const customWallpaperBg = activeContact?.wallpaper?.url
-    ? `url(${activeContact.wallpaper.url})`
-    : activeContact?.wallpaper?.css || undefined;
+  // Wallpaper background calculation (instant local reaction + persistent prop sync)
+  const currentWp = localWallpaper || activeContact?.wallpaper;
+  const hasCustomWallpaper = Boolean(currentWp && currentWp.id !== 'default');
+  const customWallpaperBg = currentWp?.url
+    ? `url("${currentWp.url}")`
+    : (currentWp?.css || currentWp?.preview || undefined);
 
   const displayHandle = activeContact?.username || 
     (activeContact?.id?.startsWith('wa_user_') ? activeContact.id.replace('wa_user_', '') : null) ||
@@ -280,14 +286,13 @@ export default function ChatArea({
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage: customWallpaperBg,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
+          background: customWallpaperBg
+            ? (customWallpaperBg.startsWith('url') ? `${customWallpaperBg} center / cover no-repeat` : customWallpaperBg)
+            : 'transparent',
           opacity: hasCustomWallpaper ? 1 : 0,
-          transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'opacity 0.3s ease, background 0.3s ease',
           pointerEvents: 'none',
-          zIndex: 0
+          zIndex: 1
         }}
       >
         {hasCustomWallpaper && (
@@ -295,8 +300,8 @@ export default function ChatArea({
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundColor: 'rgba(6, 9, 15, 0.45)',
-              backdropFilter: 'blur(1px)'
+              backgroundColor: currentWp?.type === 'custom_image' ? 'rgba(5, 8, 14, 0.42)' : 'rgba(5, 8, 14, 0.22)',
+              backdropFilter: 'blur(0.5px)'
             }}
           />
         )}
@@ -1121,9 +1126,12 @@ export default function ChatArea({
       <WallpaperModal
         isOpen={showWallpaperModal}
         onClose={() => setShowWallpaperModal(false)}
-        currentWallpaper={activeContact?.wallpaper}
+        currentWallpaper={currentWp}
         onSaveWallpaper={(newWallpaper) => {
-          onUpdateChatWallpaper && onUpdateChatWallpaper(activeContact.id, newWallpaper);
+          setLocalWallpaper(newWallpaper);
+          if (onUpdateChatWallpaper && activeContact?.id) {
+            onUpdateChatWallpaper(activeContact.id, newWallpaper);
+          }
         }}
         contactName={activeContact?.name || activeContact?.username}
       />

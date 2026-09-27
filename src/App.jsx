@@ -107,6 +107,7 @@ export default function App() {
   const [stories, setStories] = useState(() => getStoredStories());
   const [settings, setSettings] = useState(() => getSettings());
   const [blockedUsers, setBlockedUsers] = useState(() => getBlockedUsers());
+  const [wallpaperVersion, setWallpaperVersion] = useState(0);
 
   // Listen to cross-tab updates for blocked users
   useEffect(() => {
@@ -268,7 +269,7 @@ export default function App() {
     }
 
     return list;
-  }, [firestoreRooms, contacts, currentUser?.uid, activeContactId]);
+  }, [firestoreRooms, contacts, currentUser?.uid, activeContactId, wallpaperVersion]);
 
   // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
   useEffect(() => {
@@ -1474,19 +1475,34 @@ export default function App() {
       contacts.find((c) => matchesContact(c, contactId) || c.id === contactId);
 
     setContacts((prev) => {
-      const updated = prev.map((c) => {
-        if (matchesContact(c, contactId) || (targetContact && matchesContact(c, targetContact))) {
-          return {
-            ...c,
-            wallpaper: newWallpaper,
-            messages: [...(c.messages || []), systemMsg]
-          };
-        }
-        return c;
-      });
-      saveStoredContacts(updated);
-      return updated;
+      const exists = prev.some((c) => matchesContact(c, contactId) || (targetContact && matchesContact(c, targetContact)));
+      if (exists) {
+        const updated = prev.map((c) => {
+          if (matchesContact(c, contactId) || (targetContact && matchesContact(c, targetContact))) {
+            return {
+              ...c,
+              wallpaper: newWallpaper,
+              messages: [...(c.messages || []), systemMsg]
+            };
+          }
+          return c;
+        });
+        saveStoredContacts(updated);
+        return updated;
+      } else if (targetContact) {
+        const newEntry = {
+          ...targetContact,
+          wallpaper: newWallpaper,
+          messages: [...(targetContact.messages || []), systemMsg]
+        };
+        const updated = [newEntry, ...prev];
+        saveStoredContacts(updated);
+        return updated;
+      }
+      return prev;
     });
+
+    setWallpaperVersion((v) => v + 1);
 
     // Save to persistent localStorage map
     try {
