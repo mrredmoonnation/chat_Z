@@ -8,7 +8,7 @@ import {
   Check, AlertCircle, Copy, Sparkles, UserCheck, ArrowRight
 } from 'lucide-react';
 import { sounds } from '../../services/audioEffects';
-import { cleanUsername } from '../../services/store';
+import { cleanUsername, getStoredUser } from '../../services/store';
 import { searchFirestoreUsers } from '../../services/firestoreChat';
 
 /**
@@ -113,31 +113,25 @@ export default function QRCodeModal({
     }
   }, [isOpen, initialTab]);
 
-  // Construct sharing URL and QR payload
-  const currentUsername = cleanUsername(currentUser?.username || '');
-  const displayName = currentUser?.name || currentUser?.displayName || currentUsername || 'User';
+  // Construct active user with fallback to localStorage
+  const activeUser = currentUser || getStoredUser() || {};
+  const currentUsername = cleanUsername(activeUser?.username || '') ||
+    (activeUser?.phone ? activeUser.phone.replace(/[^0-9]/g, '') : '') ||
+    activeUser?.uid || activeUser?.id || 'user';
+  const displayName = activeUser?.name || activeUser?.displayName || currentUsername || 'User';
   
   const shareableUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?chat=${encodeURIComponent(currentUsername || currentUser?.uid || '')}&name=${encodeURIComponent(displayName)}`
+    ? `${window.location.origin}${window.location.pathname}?chat=${encodeURIComponent(currentUsername)}${displayName ? `&name=${encodeURIComponent(displayName)}` : ''}${activeUser?.uid ? `&uid=${encodeURIComponent(activeUser.uid)}` : ''}`
     : '';
 
   // Generate QR Code image when modal opens or user info changes
   useEffect(() => {
-    if (!isOpen || !currentUser) return;
+    if (!isOpen) return;
 
-    const qrPayload = JSON.stringify({
-      type: 'baatchit_profile',
-      version: 1,
-      uid: currentUser.uid || currentUser.id || null,
-      username: currentUsername,
-      name: displayName,
-      avatar: currentUser.avatar || currentUser.photoURL || '',
-      about: currentUser.about || 'Hey there! I am using baat chit',
-      phone: currentUser.phone || '',
-      url: shareableUrl
-    });
+    // Use clean URL as QR payload (instant generation, ultra-lightweight, 100% reliable across all devices)
+    const payload = shareableUrl || (typeof window !== 'undefined' ? `${window.location.origin}/?chat=${encodeURIComponent(currentUsername)}` : `https://baatchit.web.app/?chat=${encodeURIComponent(currentUsername)}`);
 
-    QRCode.toDataURL(qrPayload, {
+    QRCode.toDataURL(payload, {
       width: 420,
       margin: 1.5,
       color: {
@@ -147,8 +141,18 @@ export default function QRCodeModal({
       errorCorrectionLevel: 'H'
     })
       .then((url) => setQrDataUrl(url))
-      .catch((err) => console.warn('QR Code generation error:', err));
-  }, [isOpen, currentUser, currentUsername, displayName, shareableUrl]);
+      .catch((err) => {
+        console.warn('QR Code generation with H error, retrying with M:', err);
+        QRCode.toDataURL(payload, {
+          width: 420,
+          margin: 1.5,
+          color: { dark: '#111b21', light: '#ffffff' },
+          errorCorrectionLevel: 'M'
+        })
+          .then((url) => setQrDataUrl(url))
+          .catch((e) => console.error('QR Fallback error:', e));
+      });
+  }, [isOpen, activeUser?.username, activeUser?.uid, currentUsername, displayName, shareableUrl]);
 
   // Handle Camera Scanner Lifecycle
   useEffect(() => {
@@ -636,9 +640,9 @@ export default function QRCodeModal({
                     marginBottom: 10
                   }}
                 >
-                  {(currentUser?.avatar || currentUser?.photoURL) ? (
+                  {(activeUser?.avatar || activeUser?.photoURL) ? (
                     <img 
-                      src={currentUser.avatar || currentUser.photoURL} 
+                      src={activeUser.avatar || activeUser.photoURL} 
                       alt={displayName}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => {
