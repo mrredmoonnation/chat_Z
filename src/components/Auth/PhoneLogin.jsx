@@ -27,7 +27,7 @@ const BIO_PRESETS = [
   '😴 Sleeping',
   '📞 Urgent calls only',
   '✨ Living my best life',
-  'Hey there! I am using Chatz'
+  'Hey there! I am using baat chit'
 ];
 
 export default function PhoneLogin({ onLoginSuccess }) {
@@ -162,7 +162,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
           email: cleanId,
           avatar: user.photoURL || AVATAR_PRESETS[2],
           photoURL: user.photoURL || AVATAR_PRESETS[2],
-          about: 'Hey there! I am using Chatz'
+          about: 'Hey there! I am using baat chit'
         };
         setSuccessMsg('Login successful! Welcome back.');
         publishUserToCloud(userProfile);
@@ -182,12 +182,12 @@ export default function PhoneLogin({ onLoginSuccess }) {
             displayName: cleanName.charAt(0).toUpperCase() + cleanName.slice(1),
             email: cleanId,
             avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername(cleanName)}`,
-            about: 'Hey there! I am using Chatz'
+            about: 'Hey there! I am using baat chit'
           };
           registerUsername(cleanUsername(cleanName), directProfile);
           saveAccountCredentials(cleanId, loginPassword, directProfile);
           publishUserToCloud(directProfile);
-          setSuccessMsg('Direct login successful! Welcome to Chatz.');
+          setSuccessMsg('Direct login successful! Welcome to baat chit.');
           setTimeout(() => {
             setLoading(false);
             onLoginSuccess(directProfile);
@@ -235,9 +235,9 @@ export default function PhoneLogin({ onLoginSuccess }) {
       username: clean,
       name: defaultName.split('@')[0],
       displayName: defaultName.split('@')[0],
-      email: defaultName.includes('@') ? defaultName : `${clean}@chatz.app`,
+      email: defaultName.includes('@') ? defaultName : `${clean}@baatchit.app`,
       avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${clean}`,
-      about: 'Hey there! I am using Chatz'
+      about: 'Hey there! I am using baat chit'
     };
 
     registerUsername(clean, userProfile);
@@ -438,7 +438,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
       }
     }
 
-    setSuccessMsg('Profile created successfully! Welcome to Chatz.');
+    setSuccessMsg('Profile created successfully! Welcome to baat chit.');
     publishUserToCloud(userProfile);
     setTimeout(() => {
       setLoading(false);
@@ -557,12 +557,12 @@ export default function PhoneLogin({ onLoginSuccess }) {
       <div className="wa-login-top-bar">
         <div className="wa-login-brand-pill">
           <img
-            src="/logo.png"
-            alt="Chatz Logo"
-            style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }}
-            onError={(e) => { e.target.style.display = 'none'; }}
+            src="/baat_chit_logo.jpg"
+            alt="baat chit Logo"
+            style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover' }}
+            onError={(e) => { e.target.src = '/logo.png'; }}
           />
-          <span className="wa-login-brand-text">CHATZ WEB</span>
+          <span className="wa-login-brand-text">BAAT CHIT</span>
           <span className="wa-neon-dot" style={{ width: 7, height: 7 }} />
         </div>
       </div>
@@ -624,7 +624,7 @@ export default function PhoneLogin({ onLoginSuccess }) {
               <Lock size={26} />
             </div>
 
-            <h2 className="wa-login-title">Sign in to Chatz</h2>
+            <h2 className="wa-login-title">Sign in to baat chit</h2>
             <p className="wa-login-subtitle" style={{ marginBottom: 20 }}>
               Enter your Username or Gmail and Password to log in directly.
             </p>
@@ -1311,6 +1311,44 @@ export default function PhoneLogin({ onLoginSuccess }) {
             </button>
           </form>
         )}
+      </div>
+
+      {/* Meta-style Founder Attribution Badge */}
+      <div
+        className="wa-founder-meta-badge"
+        style={{
+          marginTop: 20,
+          marginBottom: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
+          opacity: 0.92,
+          zIndex: 5
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10.5,
+            textTransform: 'uppercase',
+            letterSpacing: '2.5px',
+            color: 'rgba(255, 255, 255, 0.45)',
+            fontWeight: 500
+          }}
+        >
+          from
+        </span>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: '3px',
+            color: '#4ade80',
+            textShadow: '0 0 14px rgba(74, 222, 128, 0.45)'
+          }}
+        >
+          SONU SAHANI
+        </span>
       </div>
     </div>
   );

@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
           username: defaultUsername,
           photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
           avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
-          about: 'Hey there! I am using Chatz',
+          about: 'Hey there! I am using baat chit',
           authMethod: 'google',
           joinedAt: Date.now()
         };
@@ -144,7 +144,7 @@ export const AuthProvider = ({ children }) => {
         username: cleanU,
         photoURL: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
         avatar: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
-        about: 'Hey there! I am using Chatz',
+        about: 'Hey there! I am using baat chit',
         authMethod: 'google',
         joinedAt: Date.now()
       };

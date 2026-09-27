@@ -28,7 +28,7 @@ export default function SettingsModal({
   const [name, setName] = useState(currentUser?.name || '');
   const [username, setUsername] = useState(currentUser?.username || '');
   const [usernameStatus, setUsernameStatus] = useState('');
-  const [about, setAbout] = useState(currentUser?.about || 'Hey there! I am using Chatz');
+  const [about, setAbout] = useState(currentUser?.about || 'Hey there! I am using baat chit');
   const [avatar, setAvatar] = useState(currentUser?.avatar || AVATAR_PRESETS[0]);
   const [gender, setGender] = useState(currentUser?.gender || 'male');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -37,7 +37,7 @@ export default function SettingsModal({
     if (currentUser) {
       setName(currentUser.name || currentUser.displayName || '');
       setUsername(currentUser.username || '');
-      setAbout(currentUser.about || 'Hey there! I am using Chatz');
+      setAbout(currentUser.about || 'Hey there! I am using baat chit');
       setAvatar(currentUser.avatar || currentUser.photoURL || AVATAR_PRESETS[0]);
       setGender(currentUser.gender || 'male');
     }
@@ -98,7 +98,7 @@ export default function SettingsModal({
       name: name.trim(),
       displayName: name.trim(),
       username: clean,
-      about: about.trim() || 'Hey there! I am using Chatz',
+      about: about.trim() || 'Hey there! I am using baat chit',
       avatar: avatar,
       gender: gender
     };
@@ -282,14 +282,14 @@ export default function SettingsModal({
                   className="wa-glass-input"
                   value={about}
                   onChange={(e) => setAbout(e.target.value)}
-                  placeholder="Hey there! I am using Chatz"
+                  placeholder="Hey there! I am using baat chit"
                 />
               </div>
 
               {/* User ID copy button */}
               <div className="wa-glass-card">
                 <div className="wa-glass-info-item" onClick={handleCopyMyId} style={{ cursor: 'pointer' }}>
-                  <div className="wa-glass-info-label">Your Chatz User ID (Share to connect)</div>
+                  <div className="wa-glass-info-label">Your baat chit User ID (Share to connect)</div>
                   <div className="wa-glass-info-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>@{currentUser?.username || currentUser?.id}</span>
                     {copiedId ? (
@@ -364,9 +364,31 @@ export default function SettingsModal({
                   <LogOut size={18} />
                   <div className="wa-glass-btn-text">
                     <div className="title">Log Out</div>
-                    <div className="subtitle">Sign out of your Chatz account on this device</div>
+                    <div className="subtitle">Sign out of your baat chit account on this device</div>
                   </div>
                 </button>
+              </div>
+
+              {/* About baat chit & Creator Attribution */}
+              <div className="wa-glass-card" style={{ marginTop: 20, padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <img
+                    src="/baat_chit_logo.jpg"
+                    alt="baat chit"
+                    style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover', border: '1px solid rgba(74, 222, 128, 0.35)' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>baat chit</div>
+                    <div style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>Architected & Created by Sonu Sahani</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 10, fontSize: 12.5, color: 'rgba(255, 255, 255, 0.65)', lineHeight: 1.5 }}>
+                  High-speed, end-to-end private encrypted messaging, crystal-clear voice/video calling, and AI intelligence by Mr_red_moon_Ai.
+                </div>
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px', color: 'rgba(255, 255, 255, 0.4)' }}>from</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '2.5px', color: '#4ade80' }}>SONU SAHANI</span>
+                </div>
               </div>
             </div>
           )}

@@ -68,7 +68,7 @@ export const saveFirestoreUserProfile = async (profile) => {
     displayName: profile.displayName || profile.name || cleanUsername || 'User',
     username: cleanUsername,
     photoURL: profile.photoURL || profile.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername || profile.uid}`,
-    about: profile.about || 'Hey there! I am using Chatz',
+    about: profile.about || 'Hey there! I am using baat chit',
     lastSeen: serverTimestamp(),
     createdAt: profile.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp()

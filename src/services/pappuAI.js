@@ -1,26 +1,28 @@
-// sudo_sonu_Ai — World-Class Advanced AI Assistant for Chatz
+// Mr_red_moon_Ai — World-Class Advanced AI Assistant for baat chit
+// Architected & Created by Sonu Sahani
 // Powered by Multi-Tier LLM Intelligence (OpenAI / Gemini / Mistral) + Smart Fallback Engine
 
 export const PAPPU_AI_ID = 'bot_pappu_ai';
 export const SUDO_SONU_AI_ID = 'bot_pappu_ai';
+export const MR_RED_MOON_AI_ID = 'bot_pappu_ai';
 
 export const PAPPU_AI_CONTACT = {
   id: PAPPU_AI_ID,
-  username: 'sudo_sonu_ai',
-  name: 'sudo_sonu_Ai',
-  avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=SudoSonuAI&backgroundColor=6366f1',
-  about: '🧠 Always Active • sudo_sonu_Ai — Advanced AI Assistant',
+  username: 'Mr_red_moon_Ai',
+  name: 'Mr_red_moon_Ai',
+  avatar: '/mr_red_moon_ai.jpg',
+  about: '🧠 Always Active • Mr_red_moon_Ai — Advanced AI Assistant',
   isOnline: true,
   isBot: true,
   lastSeen: 'Online (AI Assistant)',
   unreadCount: 0,
   messages: [
     {
-      id: 'msg_sudo_intro',
+      id: 'msg_mr_red_moon_intro',
       senderId: PAPPU_AI_ID,
-      senderUsername: 'sudo_sonu_ai',
-      senderName: 'sudo_sonu_Ai',
-      text: 'Salaam! 🙏 Main hoon **sudo_sonu_Ai** — aapka advanced AI assistant!\n\n🧠 **Main kya kar sakta hoon:**\n• Kisi bhi sawaal ka deep, accurate aur detailed jawaab\n• Coding, programming, debugging (Python, JS, React, etc.)\n• Math formulas, equations & step-by-step solutions\n• Science, Physics, Chemistry, Biology & Geography\n• Stories, poems, shayaris, jokes & creative writing\n• GK, current affairs, history & real-world explanations\n• Life advice, problem solving & study guidance\n\nBataiye, aaj main aapki kya madad kar sakta hoon? 😊',
+      senderUsername: 'Mr_red_moon_Ai',
+      senderName: 'Mr_red_moon_Ai',
+      text: 'Salaam! 🙏 Main hoon **Mr_red_moon_Ai** — aapka advanced AI assistant!\n\n🧠 **Main kya kar sakta hoon:**\n• Kisi bhi sawaal ka deep, accurate aur detailed jawaab\n• Coding, programming, debugging (Python, JS, React, etc.)\n• Math formulas, equations & step-by-step solutions\n• Science, Physics, Chemistry, Biology & Geography\n• Stories, poems, shayaris, jokes & creative writing\n• GK, current affairs, history & real-world explanations\n• Life advice, problem solving & study guidance\n\nBataiye, aaj main aapki kya madad kar sakta hoon? 😊',
       time: 'Just now',
       timestamp: Date.now() - 60000,
       status: 'read'
@@ -73,7 +75,7 @@ function buildChatHistory(history = [], maxMsgs = 8) {
   const recent = history.slice(-maxMsgs);
   return recent
     .map((msg) => ({
-      role: (msg.senderId === PAPPU_AI_ID || msg.senderUsername === 'sudo_sonu_ai' || msg.senderUsername === 'pappu_ai') ? 'assistant' : 'user',
+      role: (msg.senderId === PAPPU_AI_ID || msg.senderUsername === 'Mr_red_moon_Ai' || msg.senderUsername === 'sudo_sonu_ai' || msg.senderUsername === 'pappu_ai') ? 'assistant' : 'user',
       content: String(msg.text || '').trim()
     }))
     .filter((m) => m.content.length > 0);
@@ -217,11 +219,12 @@ export async function generatePappuReply(userMessage, history = [], userProfile 
   }
 
   // 2. Comprehensive System Instruction for AI Personality
-  const systemPrompt = `You are "sudo_sonu_Ai", an extremely intelligent, advanced, and helpful AI assistant on the "Chatz" messaging platform, created by Sonu.
+  const systemPrompt = `You are "Mr_red_moon_Ai", an extremely intelligent, advanced, and helpful AI assistant on the "baat chit" messaging platform, architected and created by Sonu Sahani.
 
 CORE IDENTITY & PERSONALITY:
-- Your name is "sudo_sonu_Ai".
-- You are created by Sonu.
+- Your name is "Mr_red_moon_Ai".
+- You are created and architected by Sonu Sahani.
+- You are part of the "baat chit" messaging app.
 - You are as intelligent, helpful, and knowledgeable as ChatGPT, Claude, and Gemini.
 - You communicate warmly in natural Hinglish (Hindi written in English alphabet mixed with English words) by default.
 - If the user talks in pure English, reply in English. If the user talks in Hindi (Devanagari), reply in Hindi.
@@ -250,15 +253,15 @@ ANSWER QUALITY RULES:
   // Greetings
   if (hasWord(lowerText, ['hi', 'hello', 'hey', 'namaste', 'pranam', 'salam', 'assalam', 'hola', 'sup'])) {
     return getRandom([
-      `Hello ${userName}! 🙏 Main hoon **sudo_sonu_Ai** — aapka advanced AI dost! Aaj kya jaanna chahte ho?`,
+      `Hello ${userName}! 🙏 Main hoon **Mr_red_moon_Ai** — aapka advanced AI dost! Aaj kya jaanna chahte ho?`,
       `Hey ${userName}! 👋 Kaise ho? Koi bhi topic, code, math ya sawaal — bas poochiye, main ready hoon!`,
       `Namaste ${userName} ji! 😊 Bataiye — aaj kya naya sikhna ya discuss karna hai?`
     ]);
   }
 
   // Identity
-  if (hasWord(lowerText, ['kaun ho', 'tum kaun', 'who are you', 'your name', 'naam kya', 'sudo_sonu', 'sudo sonu'])) {
-    return `Main hoon **sudo_sonu_Ai** 🤖 — Sonu ka banaya hua advanced AI assistant!\n\n🧠 **Meri capabilities:**\n• Deep Knowledge & Research level answers\n• Full-Stack Coding (JS, Python, React, C++, etc.)\n• Math & Science step-by-step solutions\n• Creative writing — Stories, Poems, Shayaris & Jokes\n• GK, Current Affairs & Real-time guidance\n\nAap mujhse kuch bhi pooch sakte hain! Bataiye, kya sawaal hai?`;
+  if (hasWord(lowerText, ['kaun ho', 'tum kaun', 'who are you', 'your name', 'naam kya', 'mr_red_moon', 'red_moon', 'sudo_sonu', 'sudo sonu'])) {
+    return `Main hoon **Mr_red_moon_Ai** 🤖 — Sonu Sahani ka banaya hua advanced AI assistant on baat chit!\n\n🧠 **Meri capabilities:**\n• Deep Knowledge & Research level answers\n• Full-Stack Coding (JS, Python, React, C++, etc.)\n• Math & Science step-by-step solutions\n• Creative writing — Stories, Poems, Shayaris & Jokes\n• GK, Current Affairs & Real-time guidance\n\nAap mujhse kuch bhi pooch sakte hain! Bataiye, kya sawaal hai?`;
   }
 
   // Jokes

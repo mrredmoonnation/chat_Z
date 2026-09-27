@@ -205,18 +205,22 @@ export default function ChatArea({
         <div className="wa-splash-card">
           <div className="wa-splash-icon">
             <img
-              src="/logo.png"
-              alt="Chatz Logo"
-              style={{ width: 48, height: 48, borderRadius: 14, objectFit: 'contain' }}
+              src="/baat_chit_logo.jpg"
+              alt="baat chit Logo"
+              style={{ width: 56, height: 56, borderRadius: 16, objectFit: 'cover', border: '1px solid rgba(74, 222, 128, 0.35)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}
             />
           </div>
-          <h2 className="wa-splash-title">Chatz Liquid Web</h2>
+          <h2 className="wa-splash-title">baat chit</h2>
           <p className="wa-splash-desc">
             Ultra-private, smoked titanium glass messaging. Select a conversation from the sidebar or tap + to start chatting in real time.
           </p>
           <div className="wa-splash-encryption">
             <Lock size={13} color="#4ade80" />
             <span>End-to-End Encrypted & Verified</span>
+          </div>
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 500 }}>from</span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '2.5px', color: '#4ade80', textShadow: '0 0 10px rgba(74, 222, 128, 0.4)' }}>SONU SAHANI</span>
           </div>
         </div>
       </div>
@@ -398,7 +402,10 @@ export default function ChatArea({
               onClick={() => {
                 if (!showOptionsMenu && optionsMenuBtnRef.current) {
                   const rect = optionsMenuBtnRef.current.getBoundingClientRect();
-                  setOptionsMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                  setOptionsMenuPos({
+                    top: Math.min(rect.bottom + 8, window.innerHeight - 310),
+                    right: Math.max(8, window.innerWidth - rect.right)
+                  });
                 }
                 setShowOptionsMenu(!showOptionsMenu);
               }}

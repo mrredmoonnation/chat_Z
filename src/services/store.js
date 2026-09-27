@@ -138,7 +138,7 @@ export const registerUsername = (username, userProfile) => {
     username: clean,
     name: userProfile.name,
     avatar: userProfile.avatar,
-    about: userProfile.about || 'Hey there! I am using Chatz',
+    about: userProfile.about || 'Hey there! I am using baat chit',
     phone: userProfile.phone || '',
     email: userProfile.email || '',
     registeredAt: registry[clean]?.registeredAt || Date.now(),
@@ -238,15 +238,18 @@ export const getStoredContacts = () => {
       );
     }
 
-    // Identify any AI contact entry (whether old pappu_ai or sudo_sonu_ai)
+    // Identify any AI contact entry (whether old pappu_ai, sudo_sonu_ai, or Mr_red_moon_Ai)
     const isBotEntry = (c) =>
       c.id === PAPPU_AI_ID ||
       c.id === 'pappu_ai' ||
       c.id === 'sudo_sonu_ai' ||
+      c.id === 'Mr_red_moon_Ai' ||
       c.username === 'pappu_ai' ||
       c.username === 'sudo_sonu_ai' ||
+      c.username === 'Mr_red_moon_Ai' ||
       c.name === 'pappu_AI' ||
-      c.name === 'sudo_sonu_Ai';
+      c.name === 'sudo_sonu_Ai' ||
+      c.name === 'Mr_red_moon_Ai';
 
     const aiIndices = [];
     contacts.forEach((c, idx) => {
@@ -260,29 +263,31 @@ export const getStoredContacts = () => {
       contacts = contacts.filter((c, idx) => !aiIndices.includes(idx));
     }
 
-    // Migrate messages to sudo_sonu_Ai branding
+    // Migrate messages to Mr_red_moon_Ai branding
     const existingMessages = existingAi?.messages || [];
     const migratedMessages = existingMessages.map((m) => {
       const isFromBot =
         m.senderId === PAPPU_AI_ID ||
         m.senderUsername === 'pappu_ai' ||
         m.senderUsername === 'sudo_sonu_ai' ||
+        m.senderUsername === 'Mr_red_moon_Ai' ||
         m.senderName === 'pappu_AI' ||
-        m.senderName === 'sudo_sonu_Ai';
+        m.senderName === 'sudo_sonu_Ai' ||
+        m.senderName === 'Mr_red_moon_Ai';
 
       if (!isFromBot) return m;
 
       // Replace old intro text if present
       let text = m.text || '';
-      if (m.id === 'msg_pappu_intro' || text.includes('pappu_AI')) {
+      if (m.id === 'msg_pappu_intro' || m.id === 'msg_sudo_intro' || text.includes('pappu_AI') || text.includes('sudo_sonu_Ai')) {
         text = PAPPU_AI_CONTACT.messages[0].text;
       }
 
       return {
         ...m,
         senderId: PAPPU_AI_ID,
-        senderUsername: 'sudo_sonu_ai',
-        senderName: 'sudo_sonu_Ai',
+        senderUsername: 'Mr_red_moon_Ai',
+        senderName: 'Mr_red_moon_Ai',
         senderAvatar: PAPPU_AI_CONTACT.avatar,
         text
       };
@@ -302,7 +307,7 @@ export const getStoredContacts = () => {
       messages: migratedMessages.length > 0 ? migratedMessages : PAPPU_AI_CONTACT.messages
     };
 
-    // Always place sudo_sonu_Ai at the top of the contacts list
+    // Always place Mr_red_moon_Ai at the top of the contacts list
     contacts = [finalAiContact, ...contacts];
 
     // Immediately persist migrated state to localStorage

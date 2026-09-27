@@ -27,7 +27,7 @@ const DRAWER_BIO_PRESETS = [
   '😴 Sleeping',
   '📞 Urgent calls only',
   '✨ Living my best life',
-  'Hey there! I am using Chatz'
+  'Hey there! I am using baat chit'
 ];
 
 export default function Sidebar({
@@ -182,7 +182,7 @@ export default function Sidebar({
   const [newContactName, setNewContactName] = useState('');
   const [newContactUsername, setNewContactUsername] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
-  const [newContactAbout, setNewContactAbout] = useState('Hey there! I am using Chatz');
+  const [newContactAbout, setNewContactAbout] = useState('Hey there! I am using baat chit');
   const [newContactGender, setNewContactGender] = useState('female');
   const [newContactAvatar, setNewContactAvatar] = useState(GENDER_AVATARS.female[0]);
   const [isManualEntry, setIsManualEntry] = useState(false);
@@ -223,7 +223,7 @@ export default function Sidebar({
       username: cleanU || null,
       name: newContactName.trim(),
       phone: newContactPhone.trim() || '',
-      about: newContactAbout.trim() || 'Hey there! I am using Chatz',
+      about: newContactAbout.trim() || 'Hey there! I am using baat chit',
       avatar: newContactAvatar || AVATAR_PRESETS[1],
       isOnline: true,
       lastSeen: 'Online',
@@ -239,7 +239,7 @@ export default function Sidebar({
     setNewContactName('');
     setNewContactUsername('');
     setNewContactPhone('');
-    setNewContactAbout('Hey there! I am using Chatz');
+    setNewContactAbout('Hey there! I am using baat chit');
     setModalSearchQuery('');
     setIsManualEntry(false);
   };
@@ -266,7 +266,7 @@ export default function Sidebar({
       uid: u.uid || null,
       username: u.username,
       name: u.displayName || u.name,
-      about: u.about || 'Hey there! I am using Chatz',
+      about: u.about || 'Hey there! I am using baat chit',
       avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
       phone: u.phone || '',
       email: u.email || '',
@@ -381,7 +381,7 @@ export default function Sidebar({
           username: u.username,
           name: u.displayName || u.name,
           avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
-          about: u.about || 'Hey there! I am using Chatz'
+          about: u.about || 'Hey there! I am using baat chit'
         });
       }
     });
@@ -414,7 +414,7 @@ export default function Sidebar({
           username: u.username,
           name: u.displayName || u.name,
           avatar: u.photoURL || u.avatar || AVATAR_PRESETS[0],
-          about: u.about || 'Hey there! I am using Chatz'
+          about: u.about || 'Hey there! I am using baat chit'
         });
       }
     });
@@ -550,7 +550,10 @@ export default function Sidebar({
               onClick={() => {
                 if (!showMenu && menuBtnRef.current) {
                   const rect = menuBtnRef.current.getBoundingClientRect();
-                  setMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                  setMenuPos({
+                    top: Math.min(rect.bottom + 8, window.innerHeight - 340),
+                    right: Math.max(8, window.innerWidth - rect.right)
+                  });
                 }
                 setShowMenu(!showMenu);
               }}
@@ -875,21 +878,21 @@ export default function Sidebar({
 
           {/* Chat List */}
           <div className="wa-chat-list">
-            {/* Dedicated sudo_sonu_Ai Assistant Banner Section */}
+            {/* Dedicated Mr_red_moon_Ai Assistant Banner Section */}
             {!searchQuery.trim() && (
               <div
                 className={`wa-ai-bot-banner ${activeContactId === PAPPU_AI_ID ? 'active' : ''}`}
                 onClick={() => onSelectContact(PAPPU_AI_ID)}
-                title="Chat with sudo_sonu_Ai (Advanced AI Assistant)"
+                title="Chat with Mr_red_moon_Ai (Advanced AI Assistant)"
                 id="pappuAiBanner"
               >
                 <div className="wa-ai-bot-avatar">
-                  <img src={PAPPU_AI_CONTACT.avatar} alt="sudo_sonu_Ai" />
+                  <img src={PAPPU_AI_CONTACT.avatar} alt="Mr_red_moon_Ai" />
                   <span className="wa-ai-pulse-dot" />
                 </div>
                 <div className="wa-ai-bot-info">
                   <div className="wa-ai-bot-title-row">
-                    <span className="wa-ai-bot-title">sudo_sonu_Ai</span>
+                    <span className="wa-ai-bot-title">Mr_red_moon_Ai</span>
                     <span className="wa-ai-badge">🧠 ADVANCED AI</span>
                   </div>
                   <div className="wa-ai-bot-sub">Always Online • Deep knowledge, coding, GK & more</div>
@@ -1212,6 +1215,44 @@ export default function Sidebar({
                 )}
               </>
             )}
+
+            {/* Meta-style Founder Attribution Badge */}
+            <div
+              className="wa-sidebar-founder-badge"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                padding: '24px 12px 28px 12px',
+                opacity: 0.85,
+                marginTop: 'auto'
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '2.5px',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  fontWeight: 500
+                }}
+              >
+                from
+              </span>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: '2.5px',
+                  color: '#4ade80',
+                  textShadow: '0 0 10px rgba(74, 222, 128, 0.35)'
+                }}
+              >
+                SONU SAHANI
+              </span>
+            </div>
           </div>
         </>
       )}
@@ -1550,6 +1591,42 @@ export default function Sidebar({
                 </>
               )}
             </button>
+
+            {/* Meta-style Founder Attribution Badge */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                padding: '16px 0 24px 0',
+                opacity: 0.85
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '2px',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  fontWeight: 500
+                }}
+              >
+                from
+              </span>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: '2px',
+                  color: '#4ade80',
+                  textShadow: '0 0 10px rgba(74, 222, 128, 0.35)'
+                }}
+              >
+                SONU SAHANI
+              </span>
+            </div>
           </div>
         </div>
       )}

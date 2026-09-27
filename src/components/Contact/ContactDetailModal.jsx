@@ -147,7 +147,7 @@ export default function ContactDetailModal({
             </div>
             <div className="wa-glass-card-body">
               <p className="wa-glass-about-text">
-                {contact.about || 'Hey there! I am using Chatz'}
+                {contact.about || 'Hey there! I am using baat chit'}
               </p>
             </div>
           </div>

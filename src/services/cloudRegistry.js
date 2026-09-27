@@ -203,7 +203,7 @@ export const publishUserToCloud = (userProfile) => {
     username: cleanU,
     name: userProfile.name || cleanU,
     avatar: userProfile.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanU}`,
-    about: userProfile.about || 'Hey there! I am using Chatz',
+    about: userProfile.about || 'Hey there! I am using baat chit',
     phone: userProfile.phone || '',
     email: userProfile.email || '',
     updatedAt: Date.now()

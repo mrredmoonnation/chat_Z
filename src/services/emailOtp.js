@@ -38,7 +38,7 @@ export const isEmailJsConfigured = () => {
  * @param {string} otpCode 6-digit OTP code
  * @param {string} toName Optional user name
  */
-export const sendRealEmailOtp = async (toEmail, otpCode, toName = 'Chatz User') => {
+export const sendRealEmailOtp = async (toEmail, otpCode, toName = 'baat chit User') => {
   const cfg = getEmailJsConfig();
 
   if (!cfg.serviceId || !cfg.templateId || !cfg.publicKey) {
@@ -57,13 +57,13 @@ export const sendRealEmailOtp = async (toEmail, otpCode, toName = 'Chatz User') 
     reply_to: toEmail,
     to_name: toName,
     name: toName,
-    from_name: 'Chatz Web',
+    from_name: 'baat chit',
     otp_code: otpCode,
     otp: otpCode,
     code: otpCode,
     passcode: otpCode,
-    message: `Your Chatz Web verification code is: ${otpCode}`,
-    app_name: 'Chatz Web',
+    message: `Your baat chit verification code is: ${otpCode}`,
+    app_name: 'baat chit',
     time: new Date().toLocaleTimeString()
   };
 

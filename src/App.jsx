@@ -245,7 +245,7 @@ export default function App() {
     }
 
     const list = [...roomContacts, ...uniqueNonRoom];
-    const isBotMatch = (c) => matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.id === 'pappu_ai' || c.username === 'pappu_ai' || c.username === 'sudo_sonu_ai' || c.name === 'pappu_AI' || c.name === 'sudo_sonu_Ai';
+    const isBotMatch = (c) => matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.id === 'pappu_ai' || c.id === 'sudo_sonu_ai' || c.id === 'Mr_red_moon_Ai' || c.username === 'pappu_ai' || c.username === 'sudo_sonu_ai' || c.username === 'Mr_red_moon_Ai' || c.name === 'pappu_AI' || c.name === 'sudo_sonu_Ai' || c.name === 'Mr_red_moon_Ai';
 
     const aiIdx = list.findIndex(isBotMatch);
     if (aiIdx === -1) {
@@ -1174,14 +1174,17 @@ export default function App() {
       || (msgData.type === 'location' ? '📍 Live Location' : null)
       || 'Sent a message';
 
-    // Check if this chat is with sudo_sonu_Ai Bot
+    // Check if this chat is with Mr_red_moon_Ai Bot
     const isBotChat = activeContactId === PAPPU_AI_ID || 
                       activeContactId === 'pappu_ai' ||
                       activeContactId === 'sudo_sonu_ai' ||
+                      activeContactId === 'Mr_red_moon_Ai' ||
                       targetContact?.id === PAPPU_AI_ID || 
                       targetContact?.username === 'pappu_ai' || 
                       targetContact?.username === 'sudo_sonu_ai' ||
+                      targetContact?.username === 'Mr_red_moon_Ai' ||
                       targetContact?.name === 'sudo_sonu_Ai' ||
+                      targetContact?.name === 'Mr_red_moon_Ai' ||
                       targetContact?.isBot;
 
     if (isBotChat) {
@@ -1190,7 +1193,7 @@ export default function App() {
       // Update local contacts with user message
       setContacts((prev) => {
         const updated = prev.map((c) => {
-          if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') {
+          if (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'Mr_red_moon_Ai' || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') {
             return {
               ...c,
               messages: [...(c.messages || []), newMsg],
@@ -1209,7 +1212,7 @@ export default function App() {
       setTimeout(() => {
         setContacts((prev) =>
           prev.map((c) =>
-            (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') ? { ...c, isTyping: true } : c
+            (matchesContact(c, PAPPU_AI_ID) || c.id === PAPPU_AI_ID || c.username === 'Mr_red_moon_Ai' || c.username === 'sudo_sonu_ai' || c.username === 'pappu_ai') ? { ...c, isTyping: true } : c
           )
         );
       }, 350);
@@ -1218,15 +1221,15 @@ export default function App() {
       setTimeout(async () => {
         try {
           const aiReplyText = await generatePappuReply(msgData, targetContact?.messages || [], currentUser);
-          const replyId = 'msg_sudo_' + Date.now();
+          const replyId = 'msg_mr_red_moon_' + Date.now();
           const replyNowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const replyNowTs = Date.now();
 
           const aiReplyMsg = {
             id: replyId,
             senderId: PAPPU_AI_ID,
-            senderUsername: 'sudo_sonu_ai',
-            senderName: 'sudo_sonu_Ai',
+            senderUsername: 'Mr_red_moon_Ai',
+            senderName: 'Mr_red_moon_Ai',
             senderAvatar: PAPPU_AI_CONTACT.avatar,
             text: aiReplyText,
             time: replyNowTime,
@@ -1439,10 +1442,10 @@ export default function App() {
   // Delete entire chat conversation / contact
   const handleDeleteChat = (contactId) => {
     setContacts((prev) => {
-      const isAiBot = contactId === PAPPU_AI_ID || contactId === 'pappu_ai' || contactId === 'sudo_sonu_ai';
+      const isAiBot = contactId === PAPPU_AI_ID || contactId === 'pappu_ai' || contactId === 'sudo_sonu_ai' || contactId === 'Mr_red_moon_Ai';
       let updated = prev.filter((c) => !matchesContact(c, contactId));
       if (isAiBot) {
-        // Reset sudo_sonu_Ai to clean state
+        // Reset Mr_red_moon_Ai to clean state
         updated = [{ ...PAPPU_AI_CONTACT, messages: [] }, ...updated];
       }
       saveStoredContacts(updated);
