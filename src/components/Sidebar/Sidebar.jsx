@@ -1115,8 +1115,11 @@ export default function Sidebar({
                                 <span>AI</span>
                               </span>
                             )}
-                            {contact.username && !contact.isBot && contact.id !== PAPPU_AI_ID && contact.username !== 'sudo_sonu_ai' && contact.username !== 'pappu_ai' && (
+                            {contact.username && !contact.isBot && contact.id !== PAPPU_AI_ID && contact.username !== 'sudo_sonu_ai' && contact.username !== 'pappu_ai' && !contact.isCommunity && (
                               <span className="wa-chat-username-pill">@{contact.username}</span>
+                            )}
+                            {contact.isCommunity && (
+                              <span className="wa-community-pill">💡 Community</span>
                             )}
                           </div>
                           <div className="wa-chat-time">{lastMsg?.time || 'Yesterday'}</div>
@@ -1166,19 +1169,21 @@ export default function Sidebar({
                       </div>
 
                       {/* Chat Delete Button on Hover */}
-                      <button
-                        type="button"
-                        className="wa-chat-item-delete-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`Delete chat with "${contact.name}"?`)) {
-                            onDeleteChat && onDeleteChat(contact.id);
-                          }
-                        }}
-                        title="Delete this chat"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {!contact.isBot && !contact.isCommunity && (
+                        <button
+                          type="button"
+                          className="wa-chat-item-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete chat with "${contact.name}"?`)) {
+                              onDeleteChat && onDeleteChat(contact.id);
+                            }
+                          }}
+                          title="Delete this chat"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}

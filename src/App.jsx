@@ -26,8 +26,16 @@ import { OnlineP2PService } from './services/onlineP2P';
 import { 
   fetchCloudUsers, publishUserToCloud, pollCloudInbox, 
   sendCloudInboxMessage, sendOfflineCloudMessage, refreshRealtimeCloud,
-  publishStoryToCloud, deleteStoryFromCloud, queryCloudStories
+  publishStoryToCloud, deleteStoryFromCloud, queryCloudStories,
+  publishCommunityMessage
 } from './services/cloudRegistry';
+import {
+  COMMUNITY_HUB_ID,
+  COMMUNITY_CONTACT,
+  COMMUNITY_ADMIN_USERNAME,
+  getStoredCommunityMessages,
+  saveStoredCommunityMessages
+} from './services/communityHub';
 import { useAuth } from './context/AuthContext';
 import { 
   getOrCreateOneToOneRoom, 
@@ -112,6 +120,8 @@ export default function App() {
   const [settings, setSettings] = useState(() => getSettings());
   const [blockedUsers, setBlockedUsers] = useState(() => getBlockedUsers());
   const [wallpaperVersion, setWallpaperVersion] = useState(0);
+  const [communityMessages, setCommunityMessages] = useState(() => getStoredCommunityMessages());
+  const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
 
   // Listen to cross-tab updates for blocked users
   useEffect(() => {
@@ -409,8 +419,27 @@ export default function App() {
       };
     }
 
+    // Ensure Tech Community & Ideas room is present on all devices
+    const isCommunityMatch = (c) => matchesContact(c, COMMUNITY_HUB_ID) || c.id === COMMUNITY_HUB_ID || c.isCommunity;
+    const commIdx = list.findIndex(isCommunityMatch);
+    const freshCommunity = {
+      ...COMMUNITY_CONTACT,
+      messages: communityMessages,
+      unreadCount: activeContactId === COMMUNITY_HUB_ID ? 0 : communityUnreadCount
+    };
+
+    if (commIdx === -1) {
+      const insertAt = list.length > 0 ? 1 : 0;
+      list.splice(insertAt, 0, freshCommunity);
+    } else {
+      list[commIdx] = {
+        ...list[commIdx],
+        ...freshCommunity
+      };
+    }
+
     return list;
-  }, [firestoreRooms, contacts, currentUser?.uid, activeContactId, wallpaperVersion]);
+  }, [firestoreRooms, contacts, currentUser?.uid, activeContactId, wallpaperVersion, communityMessages, communityUnreadCount]);
 
   // Real-time listener for messages in active Firestore ChatRoom (via onSnapshot)
   useEffect(() => {
@@ -497,6 +526,10 @@ export default function App() {
 
     const targetContact = mergedContacts.find((c) => matchesContact(c, id));
     const targetRoomId = targetContact?.roomId || (id.startsWith('room_') ? id : null);
+
+    if (id === COMMUNITY_HUB_ID || targetContact?.id === COMMUNITY_HUB_ID || targetContact?.isCommunity) {
+      setCommunityUnreadCount(0);
+    }
 
     // Clear unread count for this contact immediately and mark incoming messages as read
     setContacts((prev) => {
@@ -1166,10 +1199,45 @@ export default function App() {
         setStories(data.payload);
       } else if (data.type === 'CHAT_WALLPAPER_UPDATED') {
         handleIncomingChatWallpaper(data.payload);
+      } else if (data.type === 'COMMUNITY_MESSAGE') {
+        const commMsg = data.payload;
+        if (commMsg && commMsg.id) {
+          setCommunityMessages((prev) => {
+            if (prev.some((m) => m.id === commMsg.id)) return prev;
+            const updated = [...prev, commMsg];
+            saveStoredCommunityMessages(updated);
+            return updated;
+          });
+        }
       }
     });
 
     return () => unsubscribe();
+  }, [activeContactId]);
+
+  // Live Tech Community Discussion MQTT Real-time Listener
+  useEffect(() => {
+    const handleCommunityIncoming = (event) => {
+      const commMsg = event?.detail;
+      if (!commMsg || !commMsg.id) return;
+
+      setCommunityMessages((prev) => {
+        if (prev.some((m) => m.id === commMsg.id)) return prev;
+        const updated = [...prev, commMsg];
+        saveStoredCommunityMessages(updated);
+        return updated;
+      });
+
+      if (activeContactId !== COMMUNITY_HUB_ID) {
+        setCommunityUnreadCount((c) => c + 1);
+        sounds.playMessageReceived();
+      }
+    };
+
+    window.addEventListener('wa_community_message_received', handleCommunityIncoming);
+    return () => {
+      window.removeEventListener('wa_community_message_received', handleCommunityIncoming);
+    };
   }, [activeContactId]);
 
   // Handle Login Success
@@ -1351,6 +1419,46 @@ export default function App() {
       || (msgData.type === 'document' ? `📄 ${msgData.fileName || 'Document'}` : null)
       || (msgData.type === 'location' ? '📍 Live Location' : null)
       || 'Sent a message';
+
+    // Check if this chat is the Tech Community & Ideas Room
+    const isCommunityChat = activeContactId === COMMUNITY_HUB_ID || 
+                            targetContact?.id === COMMUNITY_HUB_ID || 
+                            targetContact?.isCommunity;
+
+    if (isCommunityChat) {
+      const cleanUser = cleanUsername(currentUser?.username);
+      const isAdmin = cleanUser === COMMUNITY_ADMIN_USERNAME || 
+                      currentUser?.username?.toLowerCase() === COMMUNITY_ADMIN_USERNAME.toLowerCase() || 
+                      currentUser?.uid?.includes(COMMUNITY_ADMIN_USERNAME);
+
+      const commMsg = {
+        id: 'comm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        // For privacy: Do NOT expose user id / phone to other devices! Only display name is public.
+        senderId: isAdmin ? `admin_${COMMUNITY_ADMIN_USERNAME}` : `member_${Math.random().toString(36).substring(2, 8)}`,
+        senderUsername: isAdmin ? COMMUNITY_ADMIN_USERNAME : null,
+        senderName: currentUser?.name || currentUser?.displayName || (isAdmin ? 'Sonu Sahani' : 'Baat Chit Member'),
+        isAdmin: isAdmin,
+        text: msgData.text || '',
+        type: msgData.type || 'text',
+        url: msgData.url || msgData.fileUrl || null,
+        fileUrl: msgData.fileUrl || msgData.url || null,
+        fileName: msgData.fileName || null,
+        caption: msgData.caption || null,
+        time: nowTime,
+        timestamp: nowTs,
+        status: 'delivered'
+      };
+
+      setCommunityMessages((prev) => {
+        const updated = [...prev, commMsg];
+        saveStoredCommunityMessages(updated);
+        return updated;
+      });
+
+      broadcastChange('COMMUNITY_MESSAGE', commMsg);
+      publishCommunityMessage(commMsg);
+      return;
+    }
 
     // Check if this chat is with Mr_red_moon_Ai Bot
     const isBotChat = activeContactId === PAPPU_AI_ID || 

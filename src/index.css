@@ -2902,6 +2902,51 @@ textarea {
   object-fit: cover !important;
 }
 
+/* Tech Community & Ideas Hub Styles */
+.wa-community-guidelines-card {
+  margin: 10px auto 16px auto !important;
+  max-width: 480px !important;
+  width: 92% !important;
+  background: rgba(18, 26, 38, 0.94) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(74, 222, 128, 0.35) !important;
+  border-radius: 14px !important;
+  padding: 14px 16px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 12px rgba(74, 222, 128, 0.1) !important;
+}
+
+.wa-community-guidelines-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.wa-admin-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  background: rgba(234, 179, 8, 0.2) !important;
+  color: #facc15 !important;
+  border: 1px solid rgba(234, 179, 8, 0.4) !important;
+  padding: 1px 6px !important;
+  border-radius: 6px !important;
+  vertical-align: middle !important;
+  letter-spacing: 0.2px !important;
+}
+
+.wa-community-pill {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #93c5fd !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  padding: 1px 8px !important;
+  border-radius: 9999px !important;
+}
+
 
 
 /* Modals & Popovers */

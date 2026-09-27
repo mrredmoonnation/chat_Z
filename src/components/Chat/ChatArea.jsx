@@ -340,38 +340,49 @@ export default function ChatArea({
           <div className="wa-chat-header-meta" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
             <div className="wa-chat-header-title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
               <span className="wa-chat-header-contact-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700, fontSize: 15, color: '#ffffff', minWidth: 0, flexShrink: 1 }}>{activeContact.name}</span>
-              {displayHandle && (
+              {activeContact.isCommunity ? (
+                <span className="wa-community-pill">💡 Community</span>
+              ) : displayHandle ? (
                 <span className="wa-chat-header-username">@{displayHandle}</span>
+              ) : null}
+              {activeContact.isCommunity && (cleanUsername(currentUser?.username) === 'sonusahani96122') && (
+                <span className="wa-admin-badge">👑 Admin (You)</span>
               )}
             </div>
             <div className={`wa-chat-header-status ${activeContact.isTyping ? 'typing' : activeContact.isOnline ? 'online' : ''}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, color: '#4ade80' }}>
-              {activeContact.isTyping
-                ? 'typing...'
-                : activeContact.isOnline
-                  ? 'online'
-                  : activeContact.lastSeen || 'last seen recently'}
+              {activeContact.isCommunity
+                ? 'Public Tech Discussion • Ideas & Support'
+                : activeContact.isTyping
+                  ? 'typing...'
+                  : activeContact.isOnline
+                    ? 'online'
+                    : activeContact.lastSeen || 'last seen recently'}
             </div>
           </div>
         </div>
 
         <div className="wa-chat-header-actions wa-pill-header-actions">
-          <button
-            id="startVideoCallBtn"
-            className="wa-pill-action-btn"
-            onClick={() => onStartCall && onStartCall(activeContact, true)}
-            title="Video Call"
-          >
-            <Video size={19} />
-          </button>
+          {!activeContact.isCommunity && (
+            <>
+              <button
+                id="startVideoCallBtn"
+                className="wa-pill-action-btn"
+                onClick={() => onStartCall && onStartCall(activeContact, true)}
+                title="Video Call"
+              >
+                <Video size={19} />
+              </button>
 
-          <button
-            id="startAudioCallBtn"
-            className="wa-pill-action-btn"
-            onClick={() => onStartCall && onStartCall(activeContact, false)}
-            title="Voice Call"
-          >
-            <Phone size={19} />
-          </button>
+              <button
+                id="startAudioCallBtn"
+                className="wa-pill-action-btn"
+                onClick={() => onStartCall && onStartCall(activeContact, false)}
+                title="Voice Call"
+              >
+                <Phone size={19} />
+              </button>
+            </>
+          )}
 
           {/* Real-time Refresh & Sync Button */}
           <button
@@ -734,6 +745,25 @@ export default function ChatArea({
 
         <div className="wa-date-divider">Today</div>
 
+        {/* Tech Community Guidelines & Privacy Banner */}
+        {activeContact.isCommunity && (
+          <div className="wa-community-guidelines-card">
+            <div className="wa-community-guidelines-header">
+              <span style={{ fontSize: 18 }}>💡</span>
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: '#4ade80' }}>
+                Tech Community Discussion Rules
+              </span>
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'rgba(255, 255, 255, 0.9)' }}>
+              Is group mein wahi log message karein jinko koi <strong>dikkat/issue</strong> hai ya <strong>naye features / ideas</strong> discuss karna chahte hain. Yeh group open discussion ke liye hai.
+            </p>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, color: 'rgba(255, 255, 255, 0.65)' }}>
+              <span>🔒 Privacy Active: User ID hidden (Sirf Naam dikhega)</span>
+              <span style={{ color: '#facc15', fontWeight: 600 }}>👑 Admin: Sonu Sahani</span>
+            </div>
+          </div>
+        )}
+
         {renderedMessages.map((msg, index) => {
           const myUid = currentUser?.uid || currentUser?.id;
           const myUsername = currentUser?.username ? currentUser.username.toLowerCase() : '';
@@ -787,9 +817,22 @@ export default function ChatArea({
                 className={`wa-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${isCurrentMatch ? 'search-match-active' : isMatch ? 'search-match' : ''
                   }`}
               >
-                {/* Group sender name if applicable */}
-                {activeContact.isGroup && !isOutgoing && msg.senderName && (
-                  <div className="wa-bubble-sender-name">{msg.senderName}</div>
+                {/* Group or Community sender name with Privacy & Admin Badge */}
+                {(activeContact.isGroup || activeContact.isCommunity) && !isOutgoing && msg.senderName && (
+                  <div className="wa-bubble-sender-name" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <span>{msg.senderName}</span>
+                    {(msg.isAdmin || msg.senderUsername === 'sonusahani96122' || msg.senderId?.includes('sonusahani96122')) && (
+                      <span className="wa-admin-badge">👑 Admin</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Community Outgoing Admin Badge */}
+                {activeContact.isCommunity && isOutgoing && (cleanUsername(currentUser?.username) === 'sonusahani96122') && (
+                  <div className="wa-bubble-sender-name" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, color: '#4ade80' }}>
+                    <span>You</span>
+                    <span className="wa-admin-badge">👑 Admin</span>
+                  </div>
                 )}
 
                 {/* Text Message */}

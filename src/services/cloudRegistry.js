@@ -42,6 +42,7 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
       mqttClient.subscribe('chatz_v2/stories/broadcast', { qos: 1 });
       mqttClient.subscribe('chatz_v2/stories/user/+', { qos: 1 });
       mqttClient.subscribe('chatz_v2/stories/query', { qos: 0 });
+      mqttClient.subscribe('chatz_v2/community/tech_ideas', { qos: 1 });
     } catch (e) {}
     return;
   }
@@ -139,6 +140,12 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         else if (topic === 'chatz_v2/stories/query') {
           broadcastMyLocalStories();
         }
+        // 6. Real-time Tech Community & Ideas discussion
+        else if (topic === 'chatz_v2/community/tech_ideas') {
+          if (data) {
+            window.dispatchEvent(new CustomEvent('wa_community_message_received', { detail: data }));
+          }
+        }
       } catch (err) {
         console.warn('Error processing incoming cloud message:', err);
       }
@@ -169,6 +176,9 @@ export const initRealtimeCloud = (myUsernamesOrIds, onMessageReceived) => {
         mqttClient.subscribe('chatz_v2/stories/broadcast', { qos: 1 });
         mqttClient.subscribe('chatz_v2/stories/user/+', { qos: 1 });
         mqttClient.subscribe('chatz_v2/stories/query', { qos: 0 });
+
+        // Subscribe to Tech Community & Ideas global discussion channel
+        mqttClient.subscribe('chatz_v2/community/tech_ideas', { qos: 1 });
 
         // Flush any queued outgoing messages
         while (pendingPublishQueue.length > 0) {
@@ -543,3 +553,23 @@ export const queryCloudStories = () => {
     } catch (e) {}
   }
 };
+
+// Publish real-time message to Tech Community & Ideas global channel
+export const publishCommunityMessage = (messagePayload) => {
+  const topic = 'chatz_v2/community/tech_ideas';
+  if (mqttClient && isConnected) {
+    try {
+      const msg = new Paho.Message(JSON.stringify(messagePayload));
+      msg.destinationName = topic;
+      msg.qos = 1;
+      mqttClient.send(msg);
+      return true;
+    } catch (err) {
+      console.warn('MQTT publishCommunityMessage error:', err);
+    }
+  } else {
+    pendingPublishQueue.push({ topic, payload: messagePayload, retained: false });
+  }
+  return false;
+};
+
