@@ -5,9 +5,11 @@ import {
   Phone, Video, Sun, Moon, LogOut, CheckCheck,
   ArrowUpRight, ArrowDownLeft, PhoneMissed, Globe, X,
   ArrowLeft, Camera, Check, User, Info, UserPlus, AtSign, Sparkles,
-  RotateCcw, Bot, Trash2, Settings, ShieldAlert, LayoutGrid, Plus
+  RotateCcw, Bot, Trash2, Settings, ShieldAlert, LayoutGrid, Plus,
+  QrCode, ScanLine
 } from 'lucide-react';
 import SettingsModal from '../Settings/SettingsModal';
+import QRCodeModal from '../QRCode/QRCodeModal';
 import {
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
   isUsernameAvailable, cleanUsername,
@@ -66,6 +68,8 @@ export default function Sidebar({
   const [isReloading, setIsReloading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrModalInitialTab, setQrModalInitialTab] = useState('myCode');
   const [editName, setEditName] = useState(currentUser?.name || '');
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editUsernameStatus, setEditUsernameStatus] = useState('');
@@ -634,6 +638,30 @@ export default function Sidebar({
                 >
                   <Users size={18} color="#3b82f6" />
                   <span>New group</span>
+                </div>
+
+                {/* QR code */}
+                <div
+                  className="wa-menu-dropdown-item"
+                  onClick={() => {
+                    setQrModalInitialTab('myCode');
+                    setIsQrModalOpen(true);
+                    setShowMenu(false);
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderRadius: 12,
+                    color: '#f1f5f9'
+                  }}
+                >
+                  <QrCode size={18} color="#00a884" />
+                  <span>QR code</span>
                 </div>
 
                 {/* 3. Settings & Privacy */}
@@ -1366,19 +1394,36 @@ export default function Sidebar({
             zIndex: 3500
           }}
         >
-          <div className="wa-profile-drawer-header">
+          <div className="wa-profile-drawer-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <button
+                id="closeProfileDrawerBtn"
+                type="button"
+                className="wa-icon-btn wa-circle-action-btn"
+                onClick={() => setIsProfileDrawerOpen(false)}
+                style={{ color: '#ffffff', cursor: 'pointer' }}
+                title="Back to Chats"
+                aria-label="Back to Chats"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <span style={{ fontSize: '18px', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>Profile</span>
+            </div>
+
             <button
-              id="closeProfileDrawerBtn"
+              id="openProfileQrBtn"
               type="button"
               className="wa-icon-btn wa-circle-action-btn"
-              onClick={() => setIsProfileDrawerOpen(false)}
-              style={{ color: '#ffffff', cursor: 'pointer' }}
-              title="Back to Chats"
-              aria-label="Back to Chats"
+              onClick={() => {
+                setQrModalInitialTab('myCode');
+                setIsQrModalOpen(true);
+              }}
+              style={{ color: 'var(--wa-green-light)', cursor: 'pointer' }}
+              title="View or Scan QR Code"
+              aria-label="View or Scan QR Code"
             >
-              <ArrowLeft size={20} />
+              <QrCode size={20} />
             </button>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>Profile</span>
           </div>
 
           <div className="wa-profile-drawer-body">
@@ -1474,6 +1519,43 @@ export default function Sidebar({
                 </div>
               </div>
             </div>
+
+            {/* WhatsApp Profile QR Code Quick Access Card */}
+            <button
+              id="drawerProfileQrRowBtn"
+              type="button"
+              className="wa-qr-profile-card-btn"
+              onClick={() => {
+                setQrModalInitialTab('myCode');
+                setIsQrModalOpen(true);
+              }}
+              title="Tap to view your QR code or scan friends to chat"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '50%',
+                  background: 'rgba(0, 168, 132, 0.16)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--wa-green-light)',
+                  flexShrink: 0
+                }}>
+                  <QrCode size={21} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#ffffff' }}>
+                    QR code
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--wa-text-muted)' }}>
+                    Tap to view or scan QR code to start chat
+                  </div>
+                </div>
+              </div>
+              <ArrowUpRight size={17} style={{ color: 'var(--wa-green-light)' }} />
+            </button>
 
             {/* Username Field */}
             <div>
@@ -1662,13 +1744,30 @@ export default function Sidebar({
                 </div>
                 <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--wa-text-primary)' }}>New Chat</h3>
               </div>
-              <button
-                onClick={() => setIsAddContactOpen(false)}
-                className="wa-icon-btn"
-                style={{ width: 32, height: 32 }}
-              >
-                <X size={18} color="var(--wa-text-secondary)" />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  id="scanQrFromNewChatBtn"
+                  onClick={() => {
+                    setIsAddContactOpen(false);
+                    setQrModalInitialTab('scanCode');
+                    setIsQrModalOpen(true);
+                  }}
+                  className="wa-icon-btn"
+                  style={{ width: 34, height: 34, color: 'var(--wa-green-light)', cursor: 'pointer' }}
+                  title="Scan QR Code to Chat"
+                  aria-label="Scan QR Code to Chat"
+                >
+                  <ScanLine size={19} />
+                </button>
+                <button
+                  onClick={() => setIsAddContactOpen(false)}
+                  className="wa-icon-btn"
+                  style={{ width: 32, height: 32 }}
+                >
+                  <X size={18} color="var(--wa-text-secondary)" />
+                </button>
+              </div>
             </div>
 
             {/* Instagram Style Username Search Box */}
@@ -1959,6 +2058,20 @@ export default function Sidebar({
         theme={theme}
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
+        onOpenQrModal={(tab) => {
+          setQrModalInitialTab(tab || 'myCode');
+          setIsQrModalOpen(true);
+        }}
+      />
+
+      {/* WhatsApp Profile & Chat QR Code Modal (My Code & Scan Code) */}
+      <QRCodeModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        currentUser={currentUser}
+        initialTab={qrModalInitialTab}
+        onConnectWithUser={handleConnectWithGlobalUser}
+        theme={theme}
       />
     </aside>
   );

@@ -1045,6 +1045,37 @@ export default function App() {
       }, 1500);
     }
 
+    // Check if URL has ?chat=XXXXX or ?user=XXXXX from a scanned QR link to auto open chat!
+    const chatFromUrl = params.get('chat') || params.get('user');
+    if (chatFromUrl) {
+      const cleanTarget = cleanUsername(chatFromUrl);
+      if (cleanTarget && cleanTarget !== cleanUsername(currentUser?.username)) {
+        setTimeout(async () => {
+          const targetObj = {
+            username: cleanTarget,
+            name: params.get('name') || cleanTarget,
+            uid: params.get('uid') || null,
+            avatar: params.get('avatar') || null
+          };
+          const room = await handleStartChatRoom(targetObj);
+          if (!room) {
+            const newContact = {
+              id: targetObj.uid ? `user_${targetObj.uid}` : ('wa_user_' + targetObj.username),
+              username: targetObj.username,
+              name: targetObj.name,
+              avatar: targetObj.avatar || AVATAR_PRESETS[0],
+              about: 'Hey there! I am using baat chit',
+              isOnline: true,
+              lastSeen: 'Online',
+              unreadCount: 0,
+              messages: []
+            };
+            handleAddContact(newContact);
+          }
+        }, 1200);
+      }
+    }
+
     return () => {
       p2p.destroy();
       p2pRef.current = null;

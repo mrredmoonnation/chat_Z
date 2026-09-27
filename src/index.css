@@ -2849,6 +2849,59 @@ textarea {
   transform: scale(0.97);
 }
 
+/* WhatsApp QR Scanner & Profile QR Styles */
+.wa-scanner-laser {
+  animation: waLaserSweep 2.2s ease-in-out infinite alternate !important;
+}
+
+@keyframes waLaserSweep {
+  0% {
+    top: 6px;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: calc(100% - 8px);
+    opacity: 0.8;
+  }
+}
+
+.wa-qr-profile-card-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 16px !important;
+  background: var(--wa-bg-input, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid var(--wa-border, rgba(255, 255, 255, 0.1)) !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  color: var(--wa-text-primary, #ffffff) !important;
+  text-align: left !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.wa-qr-profile-card-btn:hover {
+  background: rgba(0, 168, 132, 0.12) !important;
+  border-color: rgba(0, 168, 132, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.wa-qr-profile-card-btn:active {
+  transform: scale(0.99) !important;
+}
+
+/* Hide default html5-qrcode UI borders or extraneous buttons */
+#baatchit-scanner-view img[alt="Info icon"],
+#baatchit-scanner-view div[style*="border: 2px solid"],
+#baatchit-scanner-view video {
+  border-radius: 14px !important;
+  object-fit: cover !important;
+}
+
 
 
 /* Modals & Popovers */

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, ShieldAlert, ShieldCheck, User, Moon, Sun, 
   Sparkles, Camera, Check, Copy, AtSign, Info, 
-  Volume2, VolumeX, LogOut, CheckCircle2
+  Volume2, VolumeX, LogOut, CheckCircle2, QrCode
 } from 'lucide-react';
 import { 
   AVATAR_PRESETS, GENDER_AVATARS, generateBitmojiAvatar,
@@ -19,7 +19,8 @@ export default function SettingsModal({
   onUpdateProfile,
   theme,
   onToggleTheme,
-  onLogout
+  onLogout,
+  onOpenQrModal
 }) {
   const [activeTab, setActiveTab] = useState('blocked'); // 'blocked', 'profile', 'appearance'
   const [copiedId, setCopiedId] = useState(false);
@@ -242,6 +243,19 @@ export default function SettingsModal({
                 >
                   <Sparkles size={14} />
                   <span>Roll New 3D Avatar</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="wa-glass-sub-btn"
+                  onClick={() => {
+                    onClose();
+                    if (onOpenQrModal) onOpenQrModal('myCode');
+                  }}
+                  style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--wa-green-light)' }}
+                >
+                  <QrCode size={14} />
+                  <span>View & Share My QR Code</span>
                 </button>
               </div>
 
